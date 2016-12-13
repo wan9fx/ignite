@@ -107,6 +107,7 @@ import org.apache.ignite.internal.processors.cache.GridCacheUtilityKey;
 import org.apache.ignite.internal.processors.cache.IgniteCacheProxy;
 import org.apache.ignite.internal.processors.cache.IgniteInternalCache;
 import org.apache.ignite.internal.processors.cache.binary.CacheObjectBinaryProcessorImpl;
+import org.apache.ignite.internal.processors.cache.distributed.dht.atomic.GridDhtAtomicCache;
 import org.apache.ignite.internal.processors.cacheobject.IgniteCacheObjectProcessor;
 import org.apache.ignite.internal.processors.clock.GridClockSyncProcessor;
 import org.apache.ignite.internal.processors.closure.GridClosureProcessor;
@@ -1139,6 +1140,9 @@ public class IgniteKernal implements IgniteEx, IgniteMXBean, Externalizable {
                                 "    ^-- Outbound messages queue [size=" + m.getOutboundMessagesQueueSize() + "]";
 
                             log.info(msg);
+
+                            log.info("Async ops in GridDhtAtomicCache: " +
+                                GridDhtAtomicCache.adderAsyncOp.sumThenReset());
                         }
                         catch (IgniteClientDisconnectedException ignore) {
                             // No-op.

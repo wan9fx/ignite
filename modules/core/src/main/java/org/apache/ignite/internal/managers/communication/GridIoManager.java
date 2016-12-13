@@ -625,10 +625,6 @@ public class GridIoManager extends GridManagerAdapter<CommunicationSpi<Serializa
         assert nodeId != null;
         assert msg != null;
 
-        Lock busyLock0 = busyLock.readLock();
-
-        busyLock0.lock();
-
         try {
             if (stopping) {
                 if (log.isDebugEnabled())
@@ -714,9 +710,6 @@ public class GridIoManager extends GridManagerAdapter<CommunicationSpi<Serializa
         }
         catch (IgniteCheckedException e) {
             U.error(log, "Failed to process message (will ignore): " + msg, e);
-        }
-        finally {
-            busyLock0.unlock();
         }
     }
 

@@ -26,7 +26,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.Lock;
 import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.IgniteException;
 import org.apache.ignite.IgniteLogger;
@@ -349,10 +348,6 @@ public class GridCacheIoManager extends GridCacheSharedManagerAdapter {
     @SuppressWarnings({"unchecked", "ConstantConditions", "ThrowableResultOfMethodCallIgnored"})
     private void onMessage0(final UUID nodeId, final GridCacheMessage cacheMsg,
         final IgniteBiInClosure<UUID, GridCacheMessage> c) {
-        Lock lock = rw.readLock();
-
-        lock.lock();
-
         try {
             if (stopping) {
                 if (log.isDebugEnabled())
@@ -381,8 +376,6 @@ public class GridCacheIoManager extends GridCacheSharedManagerAdapter {
         finally {
             if (depEnabled)
                 cctx.deploy().ignoreOwnership(false);
-
-            lock.unlock();
         }
     }
 
@@ -825,9 +818,6 @@ public class GridCacheIoManager extends GridCacheSharedManagerAdapter {
      */
     private void processMessage(UUID nodeId, GridCacheMessage msg, IgniteBiInClosure<UUID, GridCacheMessage> c) {
         try {
-            // We will not end up with storing a bunch of new UUIDs
-            // in each cache entry, since node ID is stored in NIO session
-            // on handshake.
             c.apply(nodeId, msg);
 
             if (log.isDebugEnabled())

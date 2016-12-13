@@ -103,6 +103,7 @@ import org.apache.ignite.plugin.security.SecurityPermission;
 import org.apache.ignite.transactions.TransactionIsolation;
 import org.jetbrains.annotations.Nullable;
 import org.jsr166.ConcurrentLinkedDeque8;
+import org.jsr166.LongAdder8;
 
 import static org.apache.ignite.IgniteSystemProperties.IGNITE_ATOMIC_DEFERRED_ACK_BUFFER_SIZE;
 import static org.apache.ignite.IgniteSystemProperties.IGNITE_ATOMIC_DEFERRED_ACK_TIMEOUT;
@@ -806,6 +807,8 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
         return ctx.writeThrough() && ctx.store().configured();
     }
 
+    public static final LongAdder8 adderAsyncOp = new LongAdder8();
+
     /**
      * @param op Operation closure.
      * @return Future.
@@ -814,6 +817,8 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
     protected <T> IgniteInternalFuture<T> asyncOp(final CO<IgniteInternalFuture<T>> op) {
         if (!asyncToggled)
             return op.apply();
+
+        adderAsyncOp.increment();
 
         IgniteInternalFuture<T> fail = asyncOpAcquire();
 
