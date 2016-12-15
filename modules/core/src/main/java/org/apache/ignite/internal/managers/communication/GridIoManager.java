@@ -794,17 +794,17 @@ public class GridIoManager extends GridManagerAdapter<CommunicationSpi<Serializa
         if (msg.topicOrdinal() == TOPIC_IO_TEST.ordinal()) {
             IgniteIoTestMessage msg0 = (IgniteIoTestMessage)msg.message();
 
-            if (msg0.processFromNioThread()) {
+            if (msg0.processFromNioThread())
                 c.run();
+            else
+                ctx.getStripedExecutorService().execute(-1, c);
 
-                return;
-            }
+            return;
         }
 
         if (ctx.config().getStripedPoolSize() > 0 &&
             plc == GridIoPolicy.SYSTEM_POOL &&
-            msg.partition() != Integer.MIN_VALUE
-            ) {
+            msg.partition() != Integer.MIN_VALUE) {
             ctx.getStripedExecutorService().execute(msg.partition(), c);
 
             return;
