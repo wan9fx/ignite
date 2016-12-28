@@ -453,7 +453,7 @@ public class GridCacheUtils {
      *      that may have already left).
      */
     public static Collection<ClusterNode> allNodes(GridCacheContext ctx, AffinityTopologyVersion topOrder) {
-        return ctx.discovery().cacheNodes(ctx.namex(), topOrder);
+        return ctx.discovery().cacheNodes(ctx.cacheId(), topOrder);
     }
 
     /**
@@ -486,7 +486,7 @@ public class GridCacheUtils {
      * @return All nodes on which cache with the same name is started.
      */
     public static Collection<ClusterNode> affinityNodes(final GridCacheContext ctx) {
-        return ctx.discovery().cacheAffinityNodes(ctx.namex(), AffinityTopologyVersion.NONE);
+        return ctx.discovery().cacheAffinityNodes(ctx.cacheId(), AffinityTopologyVersion.NONE);
     }
 
     /**
@@ -497,7 +497,7 @@ public class GridCacheUtils {
      * @return Affinity nodes.
      */
     public static Collection<ClusterNode> affinityNodes(GridCacheContext ctx, AffinityTopologyVersion topOrder) {
-        return ctx.discovery().cacheAffinityNodes(ctx.namex(), topOrder);
+        return ctx.discovery().cacheAffinityNodes(ctx.cacheId(), topOrder);
     }
 
     /**

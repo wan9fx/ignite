@@ -23,7 +23,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -1684,6 +1683,8 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
         GridNearAtomicUpdateResponse res = new GridNearAtomicUpdateResponse(ctx.cacheId(), nodeId, req.futureVersion(),
             ctx.deploymentEnabled());
 
+        res.partition(req.partition());
+
         assert !req.returnValue() || (req.operation() == TRANSFORM || req.size() == 1);
 
         GridDhtAtomicAbstractUpdateFuture dhtFut = null;
@@ -1704,7 +1705,8 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
             try {
                 GridDhtPartitionTopology top = topology();
 
-                top.readLock();
+                if (!CU.cheatCache(ctx.cacheId()))
+                    top.readLock();
 
                 try {
                     if (top.stopping()) {
@@ -1737,7 +1739,7 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
 
                         if (ver == null) {
                             // Assign next version for update inside entries lock.
-                            ver = ctx.versions().next(top.topologyVersion());
+                            ver = ctx.versions().next(top.topologyVersion(), req.partition());
 
                             if (hasNear)
                                 res.nearVersion(ver);
@@ -1819,7 +1821,8 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
                         remap = true;
                 }
                 finally {
-                    top.readUnlock();
+                    if (!CU.cheatCache(ctx.cacheId()))
+                        top.readUnlock();
                 }
             }
             catch (GridCacheEntryRemovedException e) {
@@ -2344,7 +2347,7 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
 
         AffinityTopologyVersion topVer = req.topologyVersion();
 
-        boolean checkReaders = hasNear || ctx.discovery().hasNearCache(name(), topVer);
+        boolean checkReaders = hasNear || ctx.discovery().hasNearCache(ctx.cacheId(), topVer);
 
         boolean readersOnly = false;
 
@@ -2579,7 +2582,7 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
 
         AffinityTopologyVersion topVer = req.topologyVersion();
 
-        boolean checkReaders = hasNear || ctx.discovery().hasNearCache(name(), topVer);
+        boolean checkReaders = hasNear || ctx.discovery().hasNearCache(ctx.cacheId(), topVer);
 
         CacheStorePartialUpdateException storeErr = null;
 
@@ -2818,6 +2821,9 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
                 try {
                     GridDhtCacheEntry entry = entryExx(key, topVer);
 
+                    if (CU.cheatCache(ctx.cacheId())) // TODO
+                        return Collections.singletonList(entry);
+
                     GridUnsafe.monitorEnter(entry);
 
                     if (entry.obsolete())
@@ -2893,6 +2899,9 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
      * @param topVer Topology version.
      */
     private void unlockEntries(Collection<GridDhtCacheEntry> locked, AffinityTopologyVersion topVer) {
+        if (CU.cheatCache(ctx.cacheId()))
+            return;
+
         // Process deleted entries before locks release.
         assert ctx.deferredDelete() : this;
 
@@ -2904,7 +2913,7 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
             for (GridCacheMapEntry entry : locked) {
                 if (entry != null && entry.deleted()) {
                     if (skip == null)
-                        skip = new HashSet<>(locked.size(), 1.0f);
+                        skip = U.newHashSet(locked.size());
 
                     skip.add(entry.key());
                 }
@@ -3050,7 +3059,7 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
 
             AffinityTopologyVersion topVer = updateReq.topologyVersion();
 
-            Collection<ClusterNode> nodes = ctx.kernalContext().discovery().cacheAffinityNodes(name(), topVer);
+            Collection<ClusterNode> nodes = ctx.kernalContext().discovery().cacheAffinityNodes(ctx.cacheId(), topVer);
 
             // We are on primary node for some key.
             assert !nodes.isEmpty() : "Failed to find affinity nodes [name=" + name() + ", topVer=" + topVer +

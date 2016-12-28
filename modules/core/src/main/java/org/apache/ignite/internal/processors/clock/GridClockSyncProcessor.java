@@ -273,31 +273,33 @@ public class GridClockSyncProcessor extends GridProcessorAdapter {
      * @return Adjusted time.
      */
     public long adjustedTime(long topVer) {
-        T2<GridClockDeltaVersion, GridClockDeltaSnapshot> fastSnap = lastSnapshot;
+//        T2<GridClockDeltaVersion, GridClockDeltaSnapshot> fastSnap = lastSnapshot;
+//
+//        GridClockDeltaSnapshot snap;
+//
+//        if (fastSnap != null && fastSnap.get1().topologyVersion() == topVer)
+//            snap = fastSnap.get2();
+//        else {
+//            // Get last synchronized time on given topology version.
+//            Map.Entry<GridClockDeltaVersion, GridClockDeltaSnapshot> entry = timeSyncHistory().lowerEntry(
+//                new GridClockDeltaVersion(0, topVer + 1));
+//
+//            snap = entry == null ? null : entry.getValue();
+//        }
+//
+//        long now = clockSrc.currentTimeMillis();
+//
+//        if (snap == null)
+//            return now;
+//
+//        Long delta = snap.deltas().get(ctx.localNodeId());
+//
+//        if (delta == null)
+//            delta = 0L;
+//
+//        return now + delta;
 
-        GridClockDeltaSnapshot snap;
-
-        if (fastSnap != null && fastSnap.get1().topologyVersion() == topVer)
-            snap = fastSnap.get2();
-        else {
-            // Get last synchronized time on given topology version.
-            Map.Entry<GridClockDeltaVersion, GridClockDeltaSnapshot> entry = timeSyncHistory().lowerEntry(
-                new GridClockDeltaVersion(0, topVer + 1));
-
-            snap = entry == null ? null : entry.getValue();
-        }
-
-        long now = clockSrc.currentTimeMillis();
-
-        if (snap == null)
-            return now;
-
-        Long delta = snap.deltas().get(ctx.localNodeId());
-
-        if (delta == null)
-            delta = 0L;
-
-        return now + delta;
+        return System.currentTimeMillis();
     }
 
     /**
