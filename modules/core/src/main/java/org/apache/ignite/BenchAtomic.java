@@ -228,13 +228,11 @@ public class BenchAtomic {
         return new CacheConfiguration<K, V>()
             .setName("1")
             .setAtomicityMode(CacheAtomicityMode.ATOMIC)
-//            .setAtomicWriteOrderMode(CacheAtomicWriteOrderMode.PRIMARY)
            // .setAffinity(new FairAffinityFunction(1024))
             .setBackups(0)
             .setAtomicWriteOrderMode(CacheAtomicWriteOrderMode.PRIMARY)
             .setRebalanceMode(CacheRebalanceMode.SYNC)
             .setCopyOnRead(false)
-//            .setMemoryMode(CacheMemoryMode.OFFHEAP_TIERED)
             .setWriteSynchronizationMode(writeSync);
     }
 
