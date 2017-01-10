@@ -54,6 +54,8 @@ import org.apache.ignite.internal.managers.GridManagerAdapter;
 import org.apache.ignite.internal.managers.deployment.GridDeployment;
 import org.apache.ignite.internal.managers.eventstorage.GridEventStorageManager;
 import org.apache.ignite.internal.managers.eventstorage.GridLocalEventListener;
+import org.apache.ignite.internal.processors.cache.distributed.dht.atomic.GridNearAtomicAbstractUpdateFuture;
+import org.apache.ignite.internal.processors.cache.distributed.dht.atomic.GridNearAtomicUpdateResponse;
 import org.apache.ignite.internal.processors.platform.message.PlatformMessageFilter;
 import org.apache.ignite.internal.processors.pool.PoolProcessor;
 import org.apache.ignite.internal.processors.timeout.GridTimeoutObject;
@@ -798,6 +800,19 @@ public class GridIoManager extends GridManagerAdapter<CommunicationSpi<Serializa
                 c.run();
             else
                 ctx.getStripedExecutorService().execute(-1, c);
+
+            return;
+        }
+
+        if (msg.message() instanceof GridNearAtomicUpdateResponse) {
+            GridNearAtomicUpdateResponse res = (GridNearAtomicUpdateResponse)msg.message();
+
+            GridNearAtomicAbstractUpdateFuture f =
+                (GridNearAtomicAbstractUpdateFuture)ctx.cache().context().mvcc().atomicFuture(res.futureVersion());
+
+            f.completer(c);
+
+            f.unblockAllThreads();
 
             return;
         }

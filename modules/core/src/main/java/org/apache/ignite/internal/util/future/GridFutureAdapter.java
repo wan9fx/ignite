@@ -167,6 +167,20 @@ public class GridFutureAdapter<R> implements IgniteInternalFuture<R> {
     }
 
     /**
+     * @return Completer.
+     */
+    protected Runnable completer() {
+        return null;
+    }
+
+    /**
+     * @return Completer and clears it.
+     */
+    protected Runnable clearCompleter() {
+        return null;
+    }
+
+    /**
      * Internal get routine.
      *
      * @param ignoreInterrupts Whether to ignore interrupts.
@@ -186,6 +200,14 @@ public class GridFutureAdapter<R> implements IgniteInternalFuture<R> {
         try {
             for (; ; ) {
                 LockSupport.park();
+
+                Runnable r = clearCompleter();
+
+                if (r != null) {
+                    r.run();
+
+                    assert isDone();
+                }
 
                 if (isDone())
                     return resolve(state);
@@ -352,6 +374,32 @@ public class GridFutureAdapter<R> implements IgniteInternalFuture<R> {
                 WaitNode waitNode = (WaitNode) waiter;
 
                 unblockAll(waitNode.waiter);
+
+                waiter = waitNode.next;
+            }
+            else
+                return;
+        }
+    }
+
+    public void unblockAllThreads() {
+        unblockFirstThread0(state);
+    }
+
+    /**
+     * @param waiter Head of waiters queue to unblock.
+     */
+    private void unblockFirstThread0(Object waiter) {
+        while (waiter != null) {
+            if (waiter instanceof Thread) {
+                LockSupport.unpark((Thread)waiter);
+
+                return;
+            }
+            else if (waiter.getClass() == WaitNode.class) {
+                WaitNode waitNode = (WaitNode) waiter;
+
+                unblockFirstThread0(waitNode.waiter);
 
                 waiter = waitNode.next;
             }

@@ -134,6 +134,9 @@ public abstract class GridNearAtomicAbstractUpdateFuture extends GridFutureAdapt
     /** Operation result. */
     protected GridCacheReturn opRes;
 
+    /** */
+    protected volatile Runnable completer;
+
     /**
      * Constructor.
      *
@@ -214,6 +217,23 @@ public abstract class GridNearAtomicAbstractUpdateFuture extends GridFutureAdapt
 
             map(topVer);
         }
+    }
+
+    /**
+     * @param completer
+     */
+    public void completer(Runnable completer) {
+        this.completer = completer;
+    }
+
+    /** {@inheritDoc} */
+    protected Runnable clearCompleter() {
+        Runnable r = completer;
+
+        if (r != null)
+            completer = null;
+
+        return r;
     }
 
     /**
