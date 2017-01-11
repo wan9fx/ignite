@@ -40,6 +40,7 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.IgniteException;
+import org.apache.ignite.IgniteSystemProperties;
 import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.events.DiscoveryEvent;
 import org.apache.ignite.events.Event;
@@ -313,6 +314,8 @@ public class GridIoManager extends GridManagerAdapter<CommunicationSpi<Serializa
 
         if (log.isDebugEnabled())
             log.debug(startInfo());
+
+        U.debug(log, "COMPLETE_IN_USER_THREAD: " + COMPLETE_IN_USER_THREAD);
 
         addMessageListener(GridTopic.TOPIC_IO_TEST, new GridMessageListener() {
             @Override public void onMessage(UUID nodeId, Object msg) {
@@ -761,6 +764,8 @@ public class GridIoManager extends GridManagerAdapter<CommunicationSpi<Serializa
         }
     }
 
+    private static final boolean COMPLETE_IN_USER_THREAD = IgniteSystemProperties.getBoolean("COMPLETE_IN_USER_THREAD", false);
+
     /**
      * @param nodeId Node ID.
      * @param msg Message.
@@ -804,7 +809,7 @@ public class GridIoManager extends GridManagerAdapter<CommunicationSpi<Serializa
             return;
         }
 
-        if (msg.message() instanceof GridNearAtomicUpdateResponse) {
+        if (COMPLETE_IN_USER_THREAD && msg.message() instanceof GridNearAtomicUpdateResponse) {
             GridNearAtomicUpdateResponse res = (GridNearAtomicUpdateResponse)msg.message();
 
             GridNearAtomicAbstractUpdateFuture f =

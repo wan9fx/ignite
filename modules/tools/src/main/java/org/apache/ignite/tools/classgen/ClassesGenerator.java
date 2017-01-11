@@ -126,7 +126,7 @@ public class ClassesGenerator {
 
             System.out.println(msg);
 
-            throw new Exception(msg);
+            // throw new Exception(msg); TODO
         }
 
         PrintStream out = new PrintStream(new File(basePath,
