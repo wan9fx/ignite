@@ -40,7 +40,6 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.IgniteException;
-import org.apache.ignite.IgniteSystemProperties;
 import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.events.DiscoveryEvent;
 import org.apache.ignite.events.Event;
@@ -68,6 +67,7 @@ import org.apache.ignite.internal.util.lang.GridTuple3;
 import org.apache.ignite.internal.util.tostring.GridToStringInclude;
 import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.X;
+import org.apache.ignite.internal.util.typedef.internal.CU;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.internal.util.typedef.internal.U;
 import org.apache.ignite.lang.IgniteBiPredicate;
@@ -315,7 +315,7 @@ public class GridIoManager extends GridManagerAdapter<CommunicationSpi<Serializa
         if (log.isDebugEnabled())
             log.debug(startInfo());
 
-        U.debug(log, "COMPLETE_IN_USER_THREAD: " + COMPLETE_IN_USER_THREAD);
+        U.debug(log, "COMPLETE_IN_USER_THREAD for cache ID: " + COMPLETE_IN_USER_THREAD_ID);
 
         addMessageListener(GridTopic.TOPIC_IO_TEST, new GridMessageListener() {
             @Override public void onMessage(UUID nodeId, Object msg) {
@@ -764,7 +764,20 @@ public class GridIoManager extends GridManagerAdapter<CommunicationSpi<Serializa
         }
     }
 
-    private static final boolean COMPLETE_IN_USER_THREAD = IgniteSystemProperties.getBoolean("COMPLETE_IN_USER_THREAD", false);
+    private static final int COMPLETE_IN_USER_THREAD_ID;
+
+    static {
+        String cacheName = System.getProperty("COMPLETE_IN_USER_THREAD");
+
+        if (cacheName == null)
+            COMPLETE_IN_USER_THREAD_ID = 0;
+        else {
+            COMPLETE_IN_USER_THREAD_ID = CU.cacheId(cacheName);
+
+            if (COMPLETE_IN_USER_THREAD_ID == 0)
+                throw new RuntimeException();
+        }
+    }
 
     /**
      * @param nodeId Node ID.
@@ -809,17 +822,21 @@ public class GridIoManager extends GridManagerAdapter<CommunicationSpi<Serializa
             return;
         }
 
-        if (COMPLETE_IN_USER_THREAD && msg.message() instanceof GridNearAtomicUpdateResponse) {
+        if (COMPLETE_IN_USER_THREAD_ID != 0 &&
+            msg.message().directType() == 41 // instanceof GridNearAtomicUpdateResponse
+            ) {
             GridNearAtomicUpdateResponse res = (GridNearAtomicUpdateResponse)msg.message();
 
-            GridNearAtomicAbstractUpdateFuture f =
-                (GridNearAtomicAbstractUpdateFuture)ctx.cache().context().mvcc().atomicFuture(res.futureVersion());
+            if (res.cacheId() == COMPLETE_IN_USER_THREAD_ID) {
+                GridNearAtomicAbstractUpdateFuture f =
+                    (GridNearAtomicAbstractUpdateFuture)ctx.cache().context().mvcc().atomicFuture(res.futureVersion());
 
-            f.completer(c);
+                f.completer(c);
 
-            f.unblockAllThreads();
+                f.unblockAllThreads();
 
-            return;
+                return;
+            }
         }
 
         if (ctx.config().getStripedPoolSize() > 0 &&
