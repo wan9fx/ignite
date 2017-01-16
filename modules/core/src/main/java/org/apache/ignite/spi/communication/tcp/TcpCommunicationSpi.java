@@ -360,6 +360,10 @@ public class TcpCommunicationSpi extends IgniteSpiAdapter
 
             @Override public void onConnected(GridNioSession ses) {
                 if (ses.accepted()) {
+                    if (log.isInfoEnabled())
+                        log.info("Accepted incoming communication connection [locAddr=" + ses.localAddress() +
+                            ", rmtAddr=" + ses.remoteAddress() + ']');
+
                     if (log.isDebugEnabled())
                         log.debug("Sending local node ID to newly accepted session: " + ses);
 
@@ -369,6 +373,11 @@ public class TcpCommunicationSpi extends IgniteSpiAdapter
                     catch (IgniteCheckedException e) {
                         U.error(log, "Failed to send message: " + e, e);
                     }
+                }
+                else {
+                    if (log.isInfoEnabled())
+                        log.info("Established outgoing communication connection [locAddr=" + ses.localAddress() +
+                            ", rmtAddr=" + ses.remoteAddress() + ']');
                 }
             }
 
@@ -979,7 +988,7 @@ public class TcpCommunicationSpi extends IgniteSpiAdapter
     private IpcSharedMemoryServerEndpoint shmemSrv;
 
     /** */
-    private boolean usePairedConnections;
+    private Boolean usePairedConnections;
 
     /** */
     private int connectionsPerNode = DFLT_CONN_PER_NODE;
@@ -1113,6 +1122,11 @@ public class TcpCommunicationSpi extends IgniteSpiAdapter
         if (ignite != null) {
             setAddressResolver(ignite.configuration().getAddressResolver());
             setLocalAddress(ignite.configuration().getLocalHost());
+
+            if (usePairedConnections == null) {
+                // If not set, by default should be true for server and false for client.
+                usePairedConnections = !ignite.configuration().isClientMode();
+            }
         }
     }
 
@@ -1181,7 +1195,7 @@ public class TcpCommunicationSpi extends IgniteSpiAdapter
 
     /** {@inheritDoc} */
     @Override public boolean isUsePairedConnections() {
-        return usePairedConnections;
+        return usePairedConnections == null ? false : usePairedConnections;
     }
 
     /**
