@@ -1125,7 +1125,11 @@ public class TcpCommunicationSpi extends IgniteSpiAdapter
 
             if (usePairedConnections == null) {
                 // If not set, by default should be true for server and false for client.
-                usePairedConnections = !ignite.configuration().isClientMode();
+                Boolean clientMode = ignite.configuration().isClientMode();
+
+                usePairedConnections = !clientMode;
+
+                connectionsPerNode = clientMode ? 1 : 2;
             }
         }
     }
@@ -3324,7 +3328,7 @@ public class TcpCommunicationSpi extends IgniteSpiAdapter
      * @return {@code True} if given node supports multiple connections per-node for communication.
      */
     private boolean useMultipleConnections(ClusterNode node) {
-        return node.version().compareToIgnoreTimestamp(MULTIPLE_CONN_SINCE_VER) >= 0;
+        return node.version().compareToIgnoreTimestamp(MULTIPLE_CONN_SINCE_VER) >= 0 && !node.isClient();
     }
 
     /**
