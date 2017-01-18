@@ -680,9 +680,9 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
             true,
             false).get();
 
-        assert res != null;
+        assert res != null || CU.cheatCache(ctx.cacheId());
 
-        return res;
+        return CU.cheatCache(ctx.cacheId()) ? true : res;
     }
 
     /** {@inheritDoc} */
@@ -1905,7 +1905,7 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
                         if (req.writeSynchronizationMode() != FULL_ASYNC)
                             req.cleanup(!node.isLocal());
 
-                        if (dhtFut != null)
+                        if (dhtFut != null && !CU.cheatCache(ctx.cacheId()))
                             ctx.mvcc().addAtomicFuture(dhtFut.version(), dhtFut);
                     }
                     else
@@ -2517,6 +2517,8 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
 
                 if (dhtFut != null) {
                     if (updRes.sendToDht()) { // Send to backups even in case of remove-remove scenarios.
+                        dhtFut.nearNodeId = node.id(); //TODO
+
                         GridCacheVersionConflictContext<?, ?> conflictCtx = updRes.conflictResolveResult();
 
                         if (conflictCtx == null)
@@ -3195,7 +3197,7 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
     @SuppressWarnings("unchecked")
     private void processNearAtomicUpdateResponse(UUID nodeId, GridNearAtomicUpdateResponse res) {
         if (msgLog.isDebugEnabled())
-            msgLog.debug("Received near atomic update response [futId" + res.futureVersion() + ", node=" + nodeId + ']');
+            msgLog.debug("Received near atomic update response [futId=" + res.futureVersion() + ", node=" + nodeId + ']');
 
         res.nodeId(ctx.localNodeId());
 
@@ -3319,7 +3321,17 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
 
         try {
             if (res.failedKeys() != null || res.nearEvicted() != null || req.writeSynchronizationMode() == FULL_SYNC) {
-                ctx.io().send(nodeId, res, ctx.ioPolicy());
+                if (CU.cheatCache(ctx.cacheId())) {
+                    ctx.io().send(
+                        req.nearNodeId(),
+                        new GridNearAtomicUpdateResponse(ctx.cacheId(),
+                            req.nearNodeId(),
+                            req.futureVersion(),
+                            false),
+                        ctx.ioPolicy());
+                }
+                else
+                    ctx.io().send(nodeId, res, ctx.ioPolicy());
 
                 if (msgLog.isDebugEnabled()) {
                     msgLog.debug("Sent DHT atomic update response [futId=" + req.futureVersion() +

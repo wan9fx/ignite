@@ -33,6 +33,7 @@ import org.apache.ignite.internal.processors.cache.GridCacheOperation;
 import org.apache.ignite.internal.processors.cache.GridCacheReturn;
 import org.apache.ignite.internal.processors.cache.version.GridCacheVersion;
 import org.apache.ignite.internal.util.future.GridFutureAdapter;
+import org.apache.ignite.internal.util.tostring.GridToStringInclude;
 import org.apache.ignite.internal.util.typedef.CI2;
 import org.apache.ignite.internal.util.typedef.internal.CU;
 import org.apache.ignite.internal.util.typedef.internal.U;
@@ -135,6 +136,7 @@ public abstract class GridNearAtomicAbstractUpdateFuture extends GridFutureAdapt
     protected GridCacheReturn opRes;
 
     /** */
+    @GridToStringInclude
     protected volatile Runnable completer;
 
     /**

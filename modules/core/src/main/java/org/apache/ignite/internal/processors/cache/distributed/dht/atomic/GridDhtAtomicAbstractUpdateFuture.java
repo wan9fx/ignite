@@ -43,6 +43,7 @@ import org.apache.ignite.internal.util.tostring.GridToStringInclude;
 import org.apache.ignite.internal.util.typedef.CI1;
 import org.apache.ignite.internal.util.typedef.CI2;
 import org.apache.ignite.internal.util.typedef.F;
+import org.apache.ignite.internal.util.typedef.internal.CU;
 import org.apache.ignite.internal.util.typedef.internal.U;
 import org.apache.ignite.lang.IgniteUuid;
 import org.jetbrains.annotations.NotNull;
@@ -99,6 +100,8 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
     /** Response count. */
     private volatile int resCnt;
 
+    public UUID nearNodeId;
+
     /**
      * @param cctx Cache context.
      * @param completionCb Callback to invoke when future is completed.
@@ -111,10 +114,13 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
         CI2<GridNearAtomicAbstractUpdateRequest, GridNearAtomicUpdateResponse> completionCb,
         GridCacheVersion writeVer,
         GridNearAtomicAbstractUpdateRequest updateReq,
-        GridNearAtomicUpdateResponse updateRes) {
+        GridNearAtomicUpdateResponse updateRes
+    ) {
         this.cctx = cctx;
 
-        futVer = cctx.versions().next(updateReq.topologyVersion());
+        this.futVer = CU.cheatCache(cctx.cacheId()) ? updateReq.futureVersion() :
+            cctx.versions().next(updateReq.topologyVersion());
+
         this.updateReq = updateReq;
         this.completionCb = completionCb;
         this.updateRes = updateRes;
@@ -198,6 +204,8 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
                         ttl,
                         conflictExpireTime,
                         conflictVer);
+
+                    updateReq.nearNodeId(nearNodeId);
 
                     mappings.put(nodeId, updateReq);
                 }
@@ -450,7 +458,7 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
                     clsr.apply(suc);
             }
 
-            if (updateReq.writeSynchronizationMode() == FULL_SYNC)
+            if (updateReq.writeSynchronizationMode() == FULL_SYNC && !CU.cheatCache(cctx.cacheId()))
                 completionCb.apply(updateReq, updateRes);
 
             return true;

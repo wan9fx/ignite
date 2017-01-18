@@ -210,7 +210,7 @@ public class GridNearAtomicSingleUpdateFuture extends GridNearAtomicAbstractUpda
             if (!res.futureVersion().equals(futVer))
                 return;
 
-            if (!this.req.nodeId().equals(nodeId))
+            if (!this.req.nodeId().equals(nodeId) && !CU.cheatCache(cctx.cacheId()))
                 return;
 
             req = this.req;
