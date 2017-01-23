@@ -988,7 +988,7 @@ public class TcpCommunicationSpi extends IgniteSpiAdapter
     private IpcSharedMemoryServerEndpoint shmemSrv;
 
     /** */
-    private Boolean usePairedConnections;
+    private boolean usePairedConnections;
 
     /** */
     private int connectionsPerNode = DFLT_CONN_PER_NODE;
@@ -1122,13 +1122,6 @@ public class TcpCommunicationSpi extends IgniteSpiAdapter
         if (ignite != null) {
             setAddressResolver(ignite.configuration().getAddressResolver());
             setLocalAddress(ignite.configuration().getLocalHost());
-
-            if (usePairedConnections == null) {
-                // If not set, by default should be true for server and false for client.
-                Boolean clientMode = ignite.configuration().isClientMode();
-
-                usePairedConnections = !clientMode;
-            }
         }
     }
 
@@ -1197,7 +1190,7 @@ public class TcpCommunicationSpi extends IgniteSpiAdapter
 
     /** {@inheritDoc} */
     @Override public boolean isUsePairedConnections() {
-        return usePairedConnections == null ? false : usePairedConnections;
+        return usePairedConnections;
     }
 
     /**

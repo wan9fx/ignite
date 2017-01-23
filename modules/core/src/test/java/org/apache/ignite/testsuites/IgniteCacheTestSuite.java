@@ -45,10 +45,6 @@ import org.apache.ignite.internal.managers.communication.IgniteCommunicationBala
 import org.apache.ignite.internal.managers.communication.IgniteIoTestMessagesTest;
 import org.apache.ignite.internal.managers.communication.IgniteVariousConnectionNumberTest;
 import org.apache.ignite.cache.store.jdbc.JdbcTypesDefaultTransformerTest;
-import org.apache.ignite.internal.managers.communication.IgniteCommunicationBalanceMultipleConnectionsTest;
-import org.apache.ignite.internal.managers.communication.IgniteCommunicationBalanceTest;
-import org.apache.ignite.internal.managers.communication.IgniteIoTestMessagesTest;
-import org.apache.ignite.internal.managers.communication.IgniteVariousConnectionNumberTest;
 import org.apache.ignite.internal.processors.cache.CacheAffinityCallSelfTest;
 import org.apache.ignite.internal.processors.cache.CacheDeferredDeleteSanitySelfTest;
 import org.apache.ignite.internal.processors.cache.CacheEntryProcessorCopySelfTest;
