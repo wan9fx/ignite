@@ -35,6 +35,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.LockSupport;
 import org.apache.ignite.IgniteInterruptedException;
 import org.apache.ignite.IgniteLogger;
+import org.apache.ignite.internal.client.util.MpscQueue;
 import org.apache.ignite.internal.util.typedef.internal.A;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.internal.util.typedef.internal.U;
@@ -74,7 +75,7 @@ public class StripedExecutor implements ExecutorService {
 
         try {
             for (int i = 0; i < cnt; i++) {
-                stripes[i] = new StripeConcurrentQueue(
+                stripes[i] = new StripeMPSC(
                     gridName,
                     poolName,
                     i,
@@ -472,6 +473,45 @@ public class StripedExecutor implements ExecutorService {
         /** {@inheritDoc} */
         @Override public String toString() {
             return S.toString(Stripe.class, this);
+        }
+    }
+
+    private static class StripeMPSC extends Stripe {
+        private final MpscQueue<Runnable> q = new MpscQueue<>();
+
+        public StripeMPSC(
+            String gridName,
+            String poolName,
+            int idx,
+            IgniteLogger log
+        ) {
+            super(
+                gridName,
+                poolName,
+                idx,
+                log);
+        }
+
+        @Override void start() {
+            super.start();
+
+            q.setConsumerThread(thread);
+        }
+
+        @Override void execute(Runnable cmd) {
+            q.offer(cmd);
+        }
+
+        @Override Runnable take() throws InterruptedException {
+            return q.take();
+        }
+
+        @Override int queueSize() {
+            return q.size();
+        }
+
+        @Override String queueToString() {
+            return q.toString();
         }
     }
 
