@@ -217,7 +217,6 @@ public class GridClientPartitionTopology implements GridDhtPartitionTopology {
 
     /** {@inheritDoc} */
     @Override public GridDhtTopologyFuture topologyVersionFuture() {
-        // TODO
         assert topReadyFut != null;
 
         return topReadyFut;

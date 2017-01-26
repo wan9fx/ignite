@@ -825,9 +825,6 @@ class GridDhtPartitionTopologyImpl implements GridDhtPartitionTopology {
 
         List<ClusterNode> affNodes = affAssignment.get(p);
 
-        if (CU.cheatCache(cctx.cacheId()))
-            return affNodes;
-
         lock.readLock().lock();
 
         try {

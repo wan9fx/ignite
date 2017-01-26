@@ -17,15 +17,8 @@
 
 package org.apache.ignite.internal.managers.discovery;
 
-import org.apache.ignite.Ignite;
-import org.apache.ignite.Ignition;
 import org.apache.ignite.configuration.CacheConfiguration;
 import org.apache.ignite.configuration.IgniteConfiguration;
-import org.apache.ignite.configuration.NearCacheConfiguration;
-import org.apache.ignite.internal.IgniteKernal;
-import org.apache.ignite.internal.processors.affinity.AffinityTopologyVersion;
-import org.apache.ignite.internal.util.typedef.F;
-import org.apache.ignite.lang.IgnitePredicate;
 import org.apache.ignite.spi.discovery.tcp.TcpDiscoverySpi;
 import org.apache.ignite.spi.discovery.tcp.ipfinder.TcpDiscoveryIpFinder;
 import org.apache.ignite.spi.discovery.tcp.ipfinder.vm.TcpDiscoveryVmIpFinder;
@@ -80,115 +73,6 @@ public abstract class GridDiscoveryManagerSelfTest extends GridCommonAbstractTes
         cfg.setDiscoverySpi(discoverySpi);
 
         return cfg;
-    }
-
-    /**
-     * @throws Exception If failed.
-     */
-    public void testHasNearCache() throws Exception {
-        IgniteKernal g0 = (IgniteKernal)startGrid(0); // PARTITIONED_ONLY cache.
-
-        AffinityTopologyVersion none = new AffinityTopologyVersion(-1);
-        AffinityTopologyVersion one = new AffinityTopologyVersion(1);
-        AffinityTopologyVersion two = new AffinityTopologyVersion(2, 2);
-        AffinityTopologyVersion three = new AffinityTopologyVersion(3);
-        AffinityTopologyVersion four = new AffinityTopologyVersion(4);
-        AffinityTopologyVersion five = new AffinityTopologyVersion(5);
-
-        assertFalse(g0.context().discovery().hasNearCache(CACHE_NAME, none));
-        assertFalse(g0.context().discovery().hasNearCache(null, none));
-
-        assertFalse(g0.context().discovery().hasNearCache(CACHE_NAME, one));
-        assertFalse(g0.context().discovery().hasNearCache(null, one));
-
-        IgniteKernal g1 = (IgniteKernal)startGrid(1); // NEAR_ONLY cache.
-
-        grid(1).createNearCache(null, new NearCacheConfiguration());
-
-        grid(1).createNearCache(CACHE_NAME, new NearCacheConfiguration());
-
-        assertFalse(g0.context().discovery().hasNearCache(CACHE_NAME, one));
-        assertTrue(g0.context().discovery().hasNearCache(CACHE_NAME, two));
-        assertFalse(g0.context().discovery().hasNearCache(null, one));
-        assertTrue(g0.context().discovery().hasNearCache(null, two));
-
-        assertTrue(g1.context().discovery().hasNearCache(CACHE_NAME, two));
-        assertTrue(g1.context().discovery().hasNearCache(null, two));
-
-        IgniteKernal g2 = (IgniteKernal)startGrid(2); // PARTITIONED_ONLY cache.
-
-        assertFalse(g0.context().discovery().hasNearCache(CACHE_NAME, one));
-        assertTrue(g0.context().discovery().hasNearCache(CACHE_NAME, two));
-        assertTrue(g0.context().discovery().hasNearCache(CACHE_NAME, three));
-        assertFalse(g0.context().discovery().hasNearCache(null, one));
-        assertTrue(g0.context().discovery().hasNearCache(null, two));
-        assertTrue(g0.context().discovery().hasNearCache(null, three));
-
-        assertTrue(g1.context().discovery().hasNearCache(CACHE_NAME, two));
-        assertTrue(g1.context().discovery().hasNearCache(CACHE_NAME, three));
-        assertTrue(g1.context().discovery().hasNearCache(null, two));
-        assertTrue(g1.context().discovery().hasNearCache(null, three));
-
-        assertTrue(g2.context().discovery().hasNearCache(CACHE_NAME, three));
-        assertTrue(g2.context().discovery().hasNearCache(null, three));
-
-        stopGrid(2);
-
-        // Wait all nodes are on version 4.
-        for (;;) {
-            if (F.forAll(
-                Ignition.allGrids(),
-                new IgnitePredicate<Ignite>() {
-                    @Override public boolean apply(Ignite ignite) {
-                        return ignite.cluster().topologyVersion() == 4;
-                    }
-                }))
-                break;
-
-            Thread.sleep(1000);
-        }
-
-        assertFalse(g0.context().discovery().hasNearCache(CACHE_NAME, one));
-        assertTrue(g0.context().discovery().hasNearCache(CACHE_NAME, two));
-        assertTrue(g0.context().discovery().hasNearCache(CACHE_NAME, three));
-        assertTrue(g0.context().discovery().hasNearCache(CACHE_NAME, four));
-        assertFalse(g0.context().discovery().hasNearCache(null, one));
-        assertTrue(g0.context().discovery().hasNearCache(null, two));
-        assertTrue(g0.context().discovery().hasNearCache(null, three));
-        assertTrue(g0.context().discovery().hasNearCache(null, four));
-
-        assertTrue(g1.context().discovery().hasNearCache(CACHE_NAME, three));
-        assertTrue(g1.context().discovery().hasNearCache(CACHE_NAME, four));
-        assertTrue(g1.context().discovery().hasNearCache(null, three));
-        assertTrue(g1.context().discovery().hasNearCache(null, four));
-
-        stopGrid(1);
-
-        // Wait all nodes are on version 5.
-        for (;;) {
-            if (F.forAll(
-                Ignition.allGrids(),
-                new IgnitePredicate<Ignite>() {
-                    @Override public boolean apply(Ignite ignite) {
-                        return ignite.cluster().topologyVersion() == 5;
-                    }
-                }))
-                break;
-
-            Thread.sleep(1000);
-        }
-
-        assertFalse(g0.context().discovery().hasNearCache(CACHE_NAME, one));
-        assertTrue(g0.context().discovery().hasNearCache(CACHE_NAME, two));
-        assertTrue(g0.context().discovery().hasNearCache(CACHE_NAME, three));
-        assertTrue(g0.context().discovery().hasNearCache(CACHE_NAME, four));
-        assertFalse(g0.context().discovery().hasNearCache(CACHE_NAME, five));
-
-        assertFalse(g0.context().discovery().hasNearCache(null, one));
-        assertTrue(g0.context().discovery().hasNearCache(null, two));
-        assertTrue(g0.context().discovery().hasNearCache(null, three));
-        assertTrue(g0.context().discovery().hasNearCache(null, four));
-        assertFalse(g0.context().discovery().hasNearCache(null, five));
     }
 
     /**

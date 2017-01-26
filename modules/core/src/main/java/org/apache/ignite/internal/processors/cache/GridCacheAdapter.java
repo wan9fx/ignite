@@ -288,9 +288,6 @@ public abstract class GridCacheAdapter<K, V> implements IgniteInternalCache<K, V
     /** Asynchronous operations limit semaphore. */
     private Semaphore asyncOpsSem;
 
-    /** */
-    protected volatile boolean asyncToggled;
-
     /** {@inheritDoc} */
     @Override public String name() {
         return cacheCfg.getName();
@@ -364,18 +361,6 @@ public abstract class GridCacheAdapter<K, V> implements IgniteInternalCache<K, V
         init();
 
         aff = new GridCacheAffinityImpl<>(ctx);
-    }
-
-    /**
-     * Toggles async flag if someone calls {@code withAsync()}
-     * on proxy and since that we have to properly handle all cache
-     * operations (sync and async) to put them in proper sequence.
-     *
-     * TODO: https://issues.apache.org/jira/browse/IGNITE-4393
-     */
-    void toggleAsync() {
-        if (!asyncToggled)
-            asyncToggled = true;
     }
 
     /**
@@ -4461,9 +4446,6 @@ public abstract class GridCacheAdapter<K, V> implements IgniteInternalCache<K, V
      * @return Failed future if waiting was interrupted.
      */
     @Nullable protected <T> IgniteInternalFuture<T> asyncOpAcquire() {
-        if (!asyncToggled)
-            return null;
-
         try {
             if (asyncOpsSem != null)
                 asyncOpsSem.acquire();

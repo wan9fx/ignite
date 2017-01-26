@@ -1797,8 +1797,7 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
             try {
                 GridDhtPartitionTopology top = topology();
 
-                if (!CU.cheatCache(ctx.cacheId()))
-                    top.readLock();
+                top.readLock();
 
                 try {
                     if (top.stopping()) {
@@ -1913,8 +1912,7 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
                         remap = true;
                 }
                 finally {
-                    if (!CU.cheatCache(ctx.cacheId()))
-                        top.readUnlock();
+                    top.readUnlock();
                 }
             }
             catch (GridCacheEntryRemovedException e) {
@@ -2915,9 +2913,6 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
                 try {
                     GridDhtCacheEntry entry = entryExx(key, topVer);
 
-                    if (CU.cheatCache(ctx.cacheId())) // TODO
-                        return Collections.singletonList(entry);
-
                     GridUnsafe.monitorEnter(entry);
 
                     if (entry.obsolete())
@@ -2993,9 +2988,6 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
      * @param topVer Topology version.
      */
     private void unlockEntries(Collection<GridDhtCacheEntry> locked, AffinityTopologyVersion topVer) {
-        if (CU.cheatCache(ctx.cacheId()))
-            return;
-
         // Process deleted entries before locks release.
         assert ctx.deferredDelete() : this;
 
@@ -3197,7 +3189,8 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
     @SuppressWarnings("unchecked")
     private void processNearAtomicUpdateResponse(UUID nodeId, GridNearAtomicUpdateResponse res) {
         if (msgLog.isDebugEnabled())
-            msgLog.debug("Received near atomic update response [futId=" + res.futureVersion() + ", node=" + nodeId + ']');
+            msgLog.debug("Received near atomic update response " +
+                "[futId=" + res.futureVersion() + ", node=" + nodeId + ']');
 
         res.nodeId(ctx.localNodeId());
 

@@ -73,6 +73,7 @@ import org.apache.ignite.internal.managers.communication.GridIoManager;
 import org.apache.ignite.internal.managers.eventstorage.GridLocalEventListener;
 import org.apache.ignite.internal.processors.affinity.AffinityTopologyVersion;
 import org.apache.ignite.internal.processors.cache.CacheAffinitySharedManager;
+import org.apache.ignite.internal.processors.cache.DynamicCacheDescriptor;
 import org.apache.ignite.internal.processors.cache.GridCacheAdapter;
 import org.apache.ignite.internal.processors.jobmetrics.GridJobMetrics;
 import org.apache.ignite.internal.processors.security.SecurityContext;
@@ -1573,7 +1574,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
      * @return Collection of cache nodes.
      */
     public Collection<ClusterNode> nodes(AffinityTopologyVersion topVer) {
-        return resolveDiscoCache(topVer).allNodes();
+        return resolveDiscoCache(CU.cacheId(null), topVer).allNodes();
     }
 
     /**
@@ -1581,7 +1582,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
      * @return All server nodes for given topology version.
      */
     public List<ClusterNode> serverNodes(AffinityTopologyVersion topVer) {
-        return resolveDiscoCache(topVer).srvNodes;
+        return resolveDiscoCache(CU.cacheId(null), topVer).srvNodes;
     }
 
     /**
@@ -1592,7 +1593,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
      * @return Node.
      */
     public ClusterNode node(AffinityTopologyVersion topVer, UUID id) {
-        return resolveDiscoCache(topVer).node(id);
+        return resolveDiscoCache(CU.cacheId(null), topVer).node(id);
     }
 
     /**
@@ -1603,7 +1604,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
      * @return Collection of cache nodes.
      */
     public Collection<ClusterNode> cacheNodes(@Nullable String cacheName, AffinityTopologyVersion topVer) {
-        return resolveDiscoCache(topVer).cacheNodes(cacheName, topVer.topologyVersion());
+        return resolveDiscoCache(CU.cacheId(cacheName), topVer).cacheNodes(cacheName, topVer.topologyVersion());
     }
 
     /**
@@ -1614,7 +1615,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
      * @return Collection of cache nodes.
      */
     public Collection<ClusterNode> cacheNodes(int cacheId, AffinityTopologyVersion topVer) {
-        return resolveDiscoCache(topVer).cacheNodes(cacheId, topVer.topologyVersion());
+        return resolveDiscoCache(cacheId, topVer).cacheNodes(cacheId, topVer.topologyVersion()); // TODO
     }
 
     /**
@@ -1624,7 +1625,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
      * @return Collection of cache nodes.
      */
     public Collection<ClusterNode> cacheNodes(AffinityTopologyVersion topVer) {
-        return resolveDiscoCache(topVer).allNodesWithCaches(topVer.topologyVersion());
+        return resolveDiscoCache(CU.cacheId(null), topVer).allNodesWithCaches(topVer.topologyVersion());
     }
 
     /**
@@ -1634,7 +1635,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
      * @return Collection of cache nodes.
      */
     public Collection<ClusterNode> remoteCacheNodes(AffinityTopologyVersion topVer) {
-        return resolveDiscoCache(topVer).remoteCacheNodes(topVer.topologyVersion());
+        return resolveDiscoCache(CU.cacheId(null), topVer).remoteCacheNodes(topVer.topologyVersion());
     }
 
     /**
@@ -1642,7 +1643,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
      * @return Oldest alive server nodes with at least one cache configured.
      */
     @Nullable public ClusterNode oldestAliveCacheServerNode(AffinityTopologyVersion topVer) {
-        DiscoCache cache = resolveDiscoCache(topVer);
+        DiscoCache cache = resolveDiscoCache(CU.cacheId(null), topVer);
 
         Map.Entry<ClusterNode, Boolean> e = cache.aliveSrvNodesWithCaches.firstEntry();
 
@@ -1657,7 +1658,9 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
      * @return Collection of cache affinity nodes.
      */
     public Collection<ClusterNode> cacheAffinityNodes(@Nullable String cacheName, AffinityTopologyVersion topVer) {
-        return resolveDiscoCache(topVer).cacheAffinityNodes(CU.cacheId(cacheName), topVer.topologyVersion());
+        int cacheId = CU.cacheId(cacheName);
+
+        return resolveDiscoCache(cacheId, topVer).cacheAffinityNodes(cacheId, topVer.topologyVersion());
     }
 
     /**
@@ -1668,7 +1671,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
      * @return Collection of cache affinity nodes.
      */
     public Collection<ClusterNode> cacheAffinityNodes(int cacheId, AffinityTopologyVersion topVer) {
-        return resolveDiscoCache(topVer).cacheAffinityNodes(cacheId, topVer.topologyVersion());
+        return resolveDiscoCache(cacheId, topVer).cacheAffinityNodes(cacheId, topVer.topologyVersion());
     }
 
     /**
@@ -1738,17 +1741,6 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
     }
 
     /**
-     * Checks if cache with given name has at least one node with near cache enabled.
-     *
-     * @param cacheName Cache name.
-     * @param topVer Topology version.
-     * @return {@code True} if cache with given name has at least one node with near cache enabled.
-     */
-    public boolean hasNearCache(@Nullable String cacheName, AffinityTopologyVersion topVer) {
-        return resolveDiscoCache(topVer).hasNearCache(CU.cacheId(cacheName));
-    }
-
-    /**
      * Checks if cache with given ID has at least one node with near cache enabled.
      *
      * @param cacheId Cache ID.
@@ -1756,23 +1748,28 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
      * @return {@code True} if cache with given name has at least one node with near cache enabled.
      */
     public boolean hasNearCache(int cacheId, AffinityTopologyVersion topVer) {
-        return resolveDiscoCache(topVer).hasNearCache(cacheId);
+        return resolveDiscoCache(cacheId, topVer).hasNearCache(cacheId);
     }
 
     /**
      * Gets discovery cache for given topology version.
      *
+     * @param cacheId Cache ID (participates in exception message).
      * @param topVer Topology version.
      * @return Discovery cache.
      */
-    private DiscoCache resolveDiscoCache(AffinityTopologyVersion topVer) {
+    private DiscoCache resolveDiscoCache(int cacheId, AffinityTopologyVersion topVer) {
         Snapshot snap = topSnap.get();
 
         DiscoCache cache = AffinityTopologyVersion.NONE.equals(topVer) || topVer.equals(snap.topVer) ?
             snap.discoCache : discoCacheHist.get(topVer);
 
         if (cache == null) {
-            throw new IgniteException("Failed to resolve nodes topology [topVer=" + topVer +
+            DynamicCacheDescriptor desc = ctx.cache().cacheDescriptor(cacheId);
+
+            throw new IgniteException("Failed to resolve nodes topology [" +
+                "cacheName=" + (desc != null ? desc.cacheConfiguration().getName() : "N/A") +
+                ", topVer=" + topVer +
                 ", history=" + discoCacheHist.keySet() +
                 ", snap=" + snap +
                 ", locNode=" + ctx.discovery().localNode() + ']');

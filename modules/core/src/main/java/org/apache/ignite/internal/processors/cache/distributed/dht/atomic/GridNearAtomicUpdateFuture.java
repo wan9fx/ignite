@@ -491,60 +491,53 @@ public class GridNearAtomicUpdateFuture extends GridNearAtomicAbstractUpdateFutu
         AffinityTopologyVersion topVer;
         GridCacheVersion futVer;
 
-        if (!CU.cheatCache(cctx.cacheId())) {
-            cache.topology().readLock();
+        cache.topology().readLock();
 
-            try {
-                if (cache.topology().stopping()) {
-                    onDone(new IgniteCheckedException("Failed to perform cache operation (cache is stopped): " +
-                        cache.name()));
+        try {
+            if (cache.topology().stopping()) {
+                onDone(new IgniteCheckedException("Failed to perform cache operation (cache is stopped): " +
+                    cache.name()));
 
-                    return;
-                }
-
-                GridDhtTopologyFuture fut = cache.topology().topologyVersionFuture();
-
-                if (fut.isDone()) {
-                    Throwable err = fut.validateCache(cctx);
-
-                    if (err != null) {
-                        onDone(err);
-
-                        return;
-                    }
-
-                    topVer = fut.topologyVersion();
-
-                    futVer = addAtomicFuture(topVer);
-                }
-                else {
-                    if (waitTopFut) {
-                        assert !topLocked : this;
-
-                        fut.listen(new CI1<IgniteInternalFuture<AffinityTopologyVersion>>() {
-                            @Override public void apply(IgniteInternalFuture<AffinityTopologyVersion> t) {
-                                cctx.kernalContext().closure().runLocalSafe(new Runnable() {
-                                    @Override public void run() {
-                                        mapOnTopology();
-                                    }
-                                });
-                            }
-                        });
-                    }
-                    else
-                        onDone(new GridCacheTryPutFailedException());
-
-                    return;
-                }
+                return;
             }
-            finally {
-                cache.topology().readUnlock();
+
+            GridDhtTopologyFuture fut = cache.topology().topologyVersionFuture();
+
+            if (fut.isDone()) {
+                Throwable err = fut.validateCache(cctx);
+
+                if (err != null) {
+                    onDone(err);
+
+                    return;
+                }
+
+                topVer = fut.topologyVersion();
+
+                futVer = addAtomicFuture(topVer);
+            }
+            else {
+                if (waitTopFut) {
+                    assert !topLocked : this;
+
+                    fut.listen(new CI1<IgniteInternalFuture<AffinityTopologyVersion>>() {
+                        @Override public void apply(IgniteInternalFuture<AffinityTopologyVersion> t) {
+                            cctx.kernalContext().closure().runLocalSafe(new Runnable() {
+                                @Override public void run() {
+                                    mapOnTopology();
+                                }
+                            });
+                        }
+                    });
+                }
+                else
+                    onDone(new GridCacheTryPutFailedException());
+
+                return;
             }
         }
-        else {
-            topVer = cache.topology().topologyVersionFuture().topologyVersion();
-
-            futVer = addAtomicFuture(topVer);
+        finally {
+            cache.topology().readUnlock();
         }
 
         if (futVer != null)
@@ -634,7 +627,6 @@ public class GridNearAtomicUpdateFuture extends GridNearAtomicAbstractUpdateFutu
             updVer = this.updVer;
 
             if (updVer == null) {
-                //updVer = cctx.versions().next(topVer);
                 updVer = futVer;
 
                 if (log.isDebugEnabled())
