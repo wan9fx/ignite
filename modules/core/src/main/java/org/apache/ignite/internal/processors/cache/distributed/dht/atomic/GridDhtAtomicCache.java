@@ -1831,7 +1831,7 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
 
                         if (ver == null) {
                             // Assign next version for update inside entries lock.
-                            ver = ctx.versions().next(top.topologyVersion(), req.partition());
+                            ver = ctx.versions().next(top.topologyVersion());
 
                             if (hasNear)
                                 res.nearVersion(ver);
