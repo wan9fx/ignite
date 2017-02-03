@@ -1669,6 +1669,13 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
     /**
      * {@inheritDoc}
      */
+    @Override public void invoke(L key, InvokeClosure<L> c) throws IgniteCheckedException {
+        throw new UnsupportedOperationException();
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     @Override public final T put(T row) throws IgniteCheckedException {
         return put(row, true);
     }

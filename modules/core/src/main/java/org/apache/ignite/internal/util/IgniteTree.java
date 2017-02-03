@@ -19,6 +19,7 @@ package org.apache.ignite.internal.util;
 
 import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.internal.util.lang.GridCursor;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Interface for ignite internal tree.
@@ -32,6 +33,13 @@ public interface IgniteTree<L, T> {
      * @throws IgniteCheckedException If failed.
      */
     public T put(T val) throws IgniteCheckedException;
+
+    /**
+     * @param key Key.
+     * @param c Closure.
+     * @throws IgniteCheckedException If failed.
+     */
+    public void invoke(L key, InvokeClosure<L> c) throws IgniteCheckedException;
 
     /**
      * Returns the value to which the specified key is mapped, or {@code null} if this tree contains no mapping for the
@@ -70,4 +78,36 @@ public interface IgniteTree<L, T> {
      * @throws IgniteCheckedException If failed.
      */
     public long size() throws IgniteCheckedException;
+
+    /**
+     *
+     */
+    interface InvokeClosure<T> {
+        /**
+         *
+         * @param row Old row or {@code null} if old row not found.
+         * @return Operation.
+         * @throws IgniteCheckedException If failed.
+         */
+        OperationType call(@Nullable T row) throws IgniteCheckedException;
+
+        /**
+         * @return New row for {@link OperationType#UPDATE} operation.
+         */
+        T newRow();
+    }
+
+    /**
+     *
+     */
+    enum OperationType {
+        /** */
+        NOOP,
+
+        /** */
+        REMOVE,
+
+        /** */
+        UPDATE
+    }
 }
