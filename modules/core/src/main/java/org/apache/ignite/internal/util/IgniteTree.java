@@ -39,7 +39,7 @@ public interface IgniteTree<L, T> {
      * @param c Closure.
      * @throws IgniteCheckedException If failed.
      */
-    public void invoke(L key, InvokeClosure<L> c) throws IgniteCheckedException;
+    public void invoke(L key, InvokeClosure<T> c) throws IgniteCheckedException;
 
     /**
      * Returns the value to which the specified key is mapped, or {@code null} if this tree contains no mapping for the
