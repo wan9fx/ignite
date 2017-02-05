@@ -86,15 +86,21 @@ public interface IgniteTree<L, T> {
         /**
          *
          * @param row Old row or {@code null} if old row not found.
-         * @return Operation.
          * @throws IgniteCheckedException If failed.
          */
-        OperationType call(@Nullable T row) throws IgniteCheckedException;
+        void call(@Nullable T row) throws IgniteCheckedException;
 
         /**
-         * @return New row for {@link OperationType#UPDATE} operation.
+         * @return New row for {@link OperationType#PUT} operation.
          */
         T newRow();
+
+        /**
+         * @return Operation type for this closure or {@code null} if it is unknown.
+         *      After method {@link #call(Object)} has been called, operation type must
+         *      be know and this method can not return {@code null}.
+         */
+        OperationType operationType();
     }
 
     /**
@@ -108,6 +114,6 @@ public interface IgniteTree<L, T> {
         REMOVE,
 
         /** */
-        UPDATE
+        PUT
     }
 }
