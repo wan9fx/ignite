@@ -441,15 +441,8 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
             int idx = findInsertionPoint(io, pageAddr, 0, cnt, r.row, 0);
 
-            if (idx < 0) {
-                if (!r.ceil) // We've found exact match on search but now it's gone.
-                    return RETRY;
-
-                idx = fix(idx);
-
-                if (idx == cnt) // We can not remove ceiling row here. Bad luck.
-                    return NOT_FOUND;
-            }
+            if (idx < 0)
+                return RETRY; // We've found exact match on search but now it's gone.
 
             assert idx >= 0 && idx < cnt: idx;
 
@@ -1398,18 +1391,8 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
      * @return Removed row.
      * @throws IgniteCheckedException If failed.
      */
-    @SuppressWarnings("unused")
-    public final T removeCeil(L row) throws IgniteCheckedException {
-        return doRemove(row, true, true);
-    }
-
-    /**
-     * @param row Lookup row.
-     * @return Removed row.
-     * @throws IgniteCheckedException If failed.
-     */
     @Override public final T remove(L row) throws IgniteCheckedException {
-        return doRemove(row, false, true);
+        return doRemove(row, true);
     }
 
     /**
@@ -1418,20 +1401,19 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
      * @return {@code True} if removed row.
      */
     public final boolean removex(L row) throws IgniteCheckedException {
-        Boolean res = (Boolean)doRemove(row, false, false);
+        Boolean res = (Boolean)doRemove(row, false);
 
         return res != null ? res : false;
     }
 
     /**
      * @param row Lookup row.
-     * @param ceil If we can remove ceil row when we can not find exact.
      * @param needOld {@code True} if need return removed row.
      * @return Removed row.
      * @throws IgniteCheckedException If failed.
      */
-    private T doRemove(L row, boolean ceil, boolean needOld) throws IgniteCheckedException {
-        return doInvoke(row, ceil, needOld, null);
+    private T doRemove(L row, boolean needOld) throws IgniteCheckedException {
+        return doInvoke(row, needOld, null);
     }
 
     /**
@@ -1440,21 +1422,20 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
     @Override public void invoke(L key, InvokeClosure<T> c) throws IgniteCheckedException {
         assert c != null;
 
-        doInvoke(key, false, false, c);
+        doInvoke(key, false, c);
     }
 
     /**
      * @param row Lookup row.
-     * @param ceil If we can remove ceil row when we can not find exact.
      * @param needOld {@code True} if need return removed row.
      * @param c Invoke closure or {@code null} if it is just a plain remove operation.
      * @return Removed row.
      * @throws IgniteCheckedException If failed.
      */
-    private T doInvoke(L row, boolean ceil, boolean needOld, InvokeClosure<T> c) throws IgniteCheckedException {
+    private T doInvoke(L row, boolean needOld, InvokeClosure<T> c) throws IgniteCheckedException {
         checkDestroyed();
 
-        Invoke r = new Invoke(row, ceil, needOld, c);
+        Invoke r = new Invoke(row, needOld, c);
 
         try {
             for (;;) {
@@ -1574,13 +1555,10 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                         if (r.invokeType == INSERT) {
                             // TODO insert
                         }
-                        else if (!r.ceil) {
+                        else
                             r.finish();
 
-                            return res;
-                        }
-
-                        // Intentional fallthrough for ceiling remove.
+                        return res;
 
                     case FOUND:
                         // We must be at the bottom here, just need to remove row from the current page.
@@ -1589,12 +1567,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
                         res = r.removeFromLeaf(pageId, page, backId, fwdId);
 
-                        if (res == NOT_FOUND) {
-                            assert r.ceil : "must be a retry if not a ceiling remove";
-
-                            r.finish();
-                        }
-                        else if (res == FOUND && r.tail == null) {
+                        if (res == FOUND && r.tail == null) {
                             // Finish if we don't need to do any merges.
                             r.finish();
                         }
@@ -2490,9 +2463,6 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
      * Remove operation.
      */
     private final class Invoke extends Get implements ReuseBag {
-        /** */
-        private boolean ceil;
-
         /** We may need to lock part of the tree branch from the bottom to up for multiple levels. */
         private Tail<L> tail;
 
@@ -2525,14 +2495,12 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
         /**
          * @param row Row.
-         * @param ceil If we can remove ceil row when we can not find exact.
          * @param needOld {@code True} If need return old value.
          * @param c Invoke closure or {@code null} if it is just a plain remove operation.
          */
-        private Invoke(L row, boolean ceil, boolean needOld, InvokeClosure<T> c) {
+        private Invoke(L row, boolean needOld, InvokeClosure<T> c) {
             super(row);
 
-            this.ceil = ceil;
             this.needOld = needOld;
             this.c = c;
         }
