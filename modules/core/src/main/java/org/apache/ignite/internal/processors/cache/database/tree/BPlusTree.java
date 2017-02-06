@@ -68,9 +68,9 @@ import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTre
 import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.Bool.FALSE;
 import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.Bool.READY;
 import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.Bool.TRUE;
-import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.InvokeType.DELETE;
 import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.InvokeType.INSERT;
 import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.InvokeType.NOOP;
+import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.InvokeType.REMOVE;
 import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.InvokeType.REPLACE;
 import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.Result.FOUND;
 import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.Result.GO_DOWN;
@@ -82,7 +82,6 @@ import static org.apache.ignite.internal.processors.cache.database.tree.util.Pag
 import static org.apache.ignite.internal.processors.cache.database.tree.util.PageHandler.isWalDeltaRecordNeeded;
 import static org.apache.ignite.internal.processors.cache.database.tree.util.PageHandler.readPage;
 import static org.apache.ignite.internal.processors.cache.database.tree.util.PageHandler.writePage;
-import static org.apache.ignite.internal.util.IgniteTree.OperationType.REMOVE;
 
 /**
  * Abstract B+Tree.
@@ -1563,13 +1562,30 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                     case FOUND:
                         // We must be at the bottom here, just need to remove row from the current page.
                         assert lvl == 0 : lvl;
-                        assert r.invokeType != null;
 
-                        res = r.removeFromLeaf(pageId, page, backId, fwdId);
+                        switch (r.invokeType) {
+                            case REPLACE: {
+                                // TODO replace
+                                break;
+                            }
 
-                        if (res == FOUND && r.tail == null) {
-                            // Finish if we don't need to do any merges.
-                            r.finish();
+                            case REMOVE: {
+                                res = r.removeFromLeaf(pageId, page, backId, fwdId);
+
+                                if (res == FOUND && r.tail == null) {
+                                    // Finish if we don't need to do any merges.
+                                    r.finish();
+                                }
+
+                                break;
+                            }
+
+                            case NOOP:
+                                break;
+
+                            case INSERT: // We can not have INSERT here since we have found a row.
+                            default:
+                                throw new IllegalStateException("Type: " + r.invokeType);
                         }
 
                         return res;
@@ -2506,10 +2522,13 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
         }
 
         /**
-         * @return Operation type or {@code null} if it is unknown yet.
+         * @return Operation type or {@code null} if it is unknown yet. When the closure is invoked
+         *      we must know exact operation type. Note that even if the operation type is known
+         *      from the beginning it is allowed to change after the closure invocation, for example
+         *      initially it was {@code PUT} but became {@code NOOP}.
          */
         private OperationType getOperationType() {
-            return c == null ? REMOVE : c.operationType();
+            return c == null ? OperationType.REMOVE : c.operationType();
         }
 
         /**
@@ -2521,8 +2540,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
             OperationType opType = getOperationType();
 
-            if (opType == null)
-                return;
+            assert opType != null; // We do this always after the closure has been invoked.
 
             switch (opType) {
                 case NOOP:
@@ -2534,7 +2552,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                     break;
 
                 case REMOVE:
-                    invokeType = DELETE;
+                    invokeType = REMOVE;
                     break;
 
                 default:
@@ -4063,7 +4081,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
         REPLACE,
 
         /** */
-        DELETE,
+        REMOVE,
 
         /** */
         NOOP
