@@ -3780,7 +3780,7 @@ public class TcpCommunicationSpi extends IgniteSpiAdapter
                             e);
                     }
                 }
-                catch (IgniteClientDisconnectedException e0) {
+                catch (IgniteClientDisconnectedException ignored) {
                     if (log.isDebugEnabled())
                         log.debug("Failed to ping node, client disconnected.");
                 }

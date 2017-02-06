@@ -1440,7 +1440,7 @@ public class GridDiscoveryManager extends GridManagerAdapter<DiscoverySpi> {
         try {
             return getSpi().pingNode(nodeId);
         }
-        catch (IgniteException e) {
+        catch (IgniteException ignored) {
             return false;
         }
         finally {
