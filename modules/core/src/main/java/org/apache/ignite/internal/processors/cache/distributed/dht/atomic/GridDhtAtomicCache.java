@@ -680,9 +680,9 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
             true,
             false).get();
 
-        assert res != null || CU.cheatCache(ctx.cacheId());
+        assert res != null;
 
-        return CU.cheatCache(ctx.cacheId()) ? true : res;
+        return res;
     }
 
     /** {@inheritDoc} */
@@ -1905,7 +1905,7 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
                         if (req.writeSynchronizationMode() != FULL_ASYNC)
                             req.cleanup(!node.isLocal());
 
-                        if (dhtFut != null && !CU.cheatCache(ctx.cacheId()))
+                        if (dhtFut != null)
                             ctx.mvcc().addAtomicFuture(dhtFut.version(), dhtFut);
                     }
                     else
@@ -2516,8 +2516,6 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
 
                 if (dhtFut != null) {
                     if (updRes.sendToDht()) { // Send to backups even in case of remove-remove scenarios.
-                        dhtFut.nearNodeId = node.id(); //TODO
-
                         GridCacheVersionConflictContext<?, ?> conflictCtx = updRes.conflictResolveResult();
 
                         if (conflictCtx == null)
@@ -3315,17 +3313,7 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
 
         try {
             if (res.failedKeys() != null || res.nearEvicted() != null || req.writeSynchronizationMode() == FULL_SYNC) {
-                if (CU.cheatCache(ctx.cacheId())) {
-                    ctx.io().send(
-                        req.nearNodeId(),
-                        new GridNearAtomicUpdateResponse(ctx.cacheId(),
-                            req.nearNodeId(),
-                            req.futureVersion(),
-                            false),
-                        ctx.ioPolicy());
-                }
-                else
-                    ctx.io().send(nodeId, res, ctx.ioPolicy());
+                ctx.io().send(nodeId, res, ctx.ioPolicy());
 
                 if (msgLog.isDebugEnabled()) {
                     msgLog.debug("Sent DHT atomic update response [futId=" + req.futureVersion() +

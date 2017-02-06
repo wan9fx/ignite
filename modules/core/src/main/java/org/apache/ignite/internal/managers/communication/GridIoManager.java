@@ -54,8 +54,6 @@ import org.apache.ignite.internal.managers.GridManagerAdapter;
 import org.apache.ignite.internal.managers.deployment.GridDeployment;
 import org.apache.ignite.internal.managers.eventstorage.GridEventStorageManager;
 import org.apache.ignite.internal.managers.eventstorage.GridLocalEventListener;
-import org.apache.ignite.internal.processors.cache.distributed.dht.atomic.GridNearAtomicAbstractUpdateFuture;
-import org.apache.ignite.internal.processors.cache.distributed.dht.atomic.GridNearAtomicUpdateResponse;
 import org.apache.ignite.internal.processors.platform.message.PlatformMessageFilter;
 import org.apache.ignite.internal.processors.pool.PoolProcessor;
 import org.apache.ignite.internal.processors.timeout.GridTimeoutObject;
@@ -67,7 +65,6 @@ import org.apache.ignite.internal.util.lang.GridTuple3;
 import org.apache.ignite.internal.util.tostring.GridToStringInclude;
 import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.X;
-import org.apache.ignite.internal.util.typedef.internal.CU;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.internal.util.typedef.internal.U;
 import org.apache.ignite.lang.IgniteBiPredicate;
@@ -314,8 +311,6 @@ public class GridIoManager extends GridManagerAdapter<CommunicationSpi<Serializa
 
         if (log.isDebugEnabled())
             log.debug(startInfo());
-
-        U.debug(log, "COMPLETE_IN_USER_THREAD for cache ID: " + COMPLETE_IN_USER_THREAD_ID);
 
         addMessageListener(GridTopic.TOPIC_IO_TEST, new GridMessageListener() {
             @Override public void onMessage(UUID nodeId, Object msg) {
@@ -771,21 +766,6 @@ public class GridIoManager extends GridManagerAdapter<CommunicationSpi<Serializa
         }
     }
 
-    private static final int COMPLETE_IN_USER_THREAD_ID;
-
-    static {
-        String cacheName = System.getProperty("COMPLETE_IN_USER_THREAD");
-
-        if (cacheName == null)
-            COMPLETE_IN_USER_THREAD_ID = 0;
-        else {
-            COMPLETE_IN_USER_THREAD_ID = CU.cacheId(cacheName);
-
-            if (COMPLETE_IN_USER_THREAD_ID == 0)
-                throw new RuntimeException();
-        }
-    }
-
     /**
      * @param nodeId Node ID.
      * @param msg Message.
@@ -827,23 +807,6 @@ public class GridIoManager extends GridManagerAdapter<CommunicationSpi<Serializa
                 ctx.getStripedExecutorService().execute(-1, c);
 
             return;
-        }
-
-        if (COMPLETE_IN_USER_THREAD_ID != 0 &&
-            msg.message().directType() == 41 // instanceof GridNearAtomicUpdateResponse
-            ) {
-            GridNearAtomicUpdateResponse res = (GridNearAtomicUpdateResponse)msg.message();
-
-            if (res.cacheId() == COMPLETE_IN_USER_THREAD_ID) {
-                GridNearAtomicAbstractUpdateFuture f =
-                    (GridNearAtomicAbstractUpdateFuture)ctx.cache().context().mvcc().atomicFuture(res.futureVersion());
-
-                f.completer(c);
-
-                f.unblockAllThreads();
-
-                return;
-            }
         }
 
         if (ctx.config().getStripedPoolSize() > 0 &&

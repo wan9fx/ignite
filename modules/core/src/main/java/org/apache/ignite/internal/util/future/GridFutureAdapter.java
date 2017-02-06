@@ -167,20 +167,6 @@ public class GridFutureAdapter<R> implements IgniteInternalFuture<R> {
     }
 
     /**
-     * @return Completer.
-     */
-    protected Runnable completer() {
-        return null;
-    }
-
-    /**
-     * @return Completer and clears it.
-     */
-    protected Runnable clearCompleter() {
-        return null;
-    }
-
-    /**
      * Internal get routine.
      *
      * @param ignoreInterrupts Whether to ignore interrupts.
@@ -200,14 +186,6 @@ public class GridFutureAdapter<R> implements IgniteInternalFuture<R> {
         try {
             for (; ; ) {
                 LockSupport.park();
-
-                Runnable r = clearCompleter();
-
-                if (r != null) {
-                    r.run();
-
-                    assert isDone();
-                }
 
                 if (isDone())
                     return resolve(state);

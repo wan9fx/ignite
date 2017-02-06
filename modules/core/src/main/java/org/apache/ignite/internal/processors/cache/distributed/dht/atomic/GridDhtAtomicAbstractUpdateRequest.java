@@ -76,14 +76,6 @@ public abstract class GridDhtAtomicAbstractUpdateRequest extends GridCacheMessag
         return nodeId;
     }
 
-    public UUID nearNodeId() {
-        return null;
-    }
-
-    public void nearNodeId(UUID nearNodeId) {
-
-    }
-
     /**
      * @return Keep binary flag.
      */
