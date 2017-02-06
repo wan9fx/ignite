@@ -211,7 +211,8 @@ public class ClassesGenerator {
         if (included) {
             Class<?> cls = Class.forName(clsName, false, ldr);
 
-            if (Serializable.class.isAssignableFrom(cls) && !cls.getName().endsWith("Future")) {
+            if (Serializable.class.isAssignableFrom(cls) &&
+                !(cls.getName().endsWith("Future") || cls.getName().endsWith("FutureAdapter"))) {
                 if (!cls.isInterface() && !Modifier.isAbstract(cls.getModifiers()) && !cls.isEnum() &&
                     !cls.getSimpleName().isEmpty()) {
                     try {
