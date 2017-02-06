@@ -68,10 +68,6 @@ import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTre
 import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.Bool.FALSE;
 import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.Bool.READY;
 import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.Bool.TRUE;
-import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.InvokeType.INSERT;
-import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.InvokeType.NOOP;
-import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.InvokeType.REMOVE;
-import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.InvokeType.REPLACE;
 import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.Result.FOUND;
 import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.Result.GO_DOWN;
 import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.Result.GO_DOWN_X;
@@ -228,9 +224,9 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
             long res = doAskNeighbor(io, pageAddr, back);
 
             if (back) {
-                assert g.getClass() == Invoke.class;
+                assert g.getClass() == Remove.class;
 
-                if (io.getForward(pageAddr) != g.backId) // See how g.backId is setup in invokeDown for this check.
+                if (io.getForward(pageAddr) != g.backId) // See how g.backId is setup in removeDown for this check.
                     return RETRY;
 
                 g.backId = res;
@@ -423,14 +419,14 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
     }
 
     /** */
-    private final GetPageHandler<Invoke> rmvFromLeaf = new RemoveFromLeaf();
+    private final GetPageHandler<Remove> rmvFromLeaf = new RemoveFromLeaf();
 
     /**
      *
      */
-    private class RemoveFromLeaf extends GetPageHandler<Invoke> {
+    private class RemoveFromLeaf extends GetPageHandler<Remove> {
         /** {@inheritDoc} */
-        @Override public Result run0(Page leaf, long pageAddr, BPlusIO<L> io, Invoke r, int lvl)
+        @Override public Result run0(Page leaf, long pageAddr, BPlusIO<L> io, Remove r, int lvl)
             throws IgniteCheckedException {
             assert lvl == 0 : lvl; // Leaf.
 
@@ -494,14 +490,14 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
     }
 
     /** */
-    private final GetPageHandler<Invoke> lockBackAndRmvFromLeaf = new LockBackAndRmvFromLeaf();
+    private final GetPageHandler<Remove> lockBackAndRmvFromLeaf = new LockBackAndRmvFromLeaf();
 
     /**
      *
      */
-    private class LockBackAndRmvFromLeaf extends GetPageHandler<Invoke> {
+    private class LockBackAndRmvFromLeaf extends GetPageHandler<Remove> {
         /** {@inheritDoc} */
-        @Override protected Result run0(Page back, long pageAddr, BPlusIO<L> io, Invoke r, int lvl)
+        @Override protected Result run0(Page back, long pageAddr, BPlusIO<L> io, Remove r, int lvl)
             throws IgniteCheckedException {
             // Check that we have consistent view of the world.
             if (io.getForward(pageAddr) != r.pageId)
@@ -519,14 +515,14 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
     }
 
     /** */
-    private final GetPageHandler<Invoke> lockBackAndTail = new LockBackAndTail();
+    private final GetPageHandler<Remove> lockBackAndTail = new LockBackAndTail();
 
     /**
      *
      */
-    private class LockBackAndTail extends GetPageHandler<Invoke> {
+    private class LockBackAndTail extends GetPageHandler<Remove> {
         /** {@inheritDoc} */
-        @Override public Result run0(Page back, long pageAddr, BPlusIO<L> io, Invoke r, int lvl)
+        @Override public Result run0(Page back, long pageAddr, BPlusIO<L> io, Remove r, int lvl)
             throws IgniteCheckedException {
             // Check that we have consistent view of the world.
             if (io.getForward(pageAddr) != r.pageId)
@@ -543,14 +539,14 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
     }
 
     /** */
-    private final GetPageHandler<Invoke> lockTailForward = new LockTailForward();
+    private final GetPageHandler<Remove> lockTailForward = new LockTailForward();
 
     /**
      *
      */
-    private class LockTailForward extends GetPageHandler<Invoke> {
+    private class LockTailForward extends GetPageHandler<Remove> {
         /** {@inheritDoc} */
-        @Override protected Result run0(Page page, long pageAddr, BPlusIO<L> io, Invoke r, int lvl)
+        @Override protected Result run0(Page page, long pageAddr, BPlusIO<L> io, Remove r, int lvl)
             throws IgniteCheckedException {
             r.addTail(page, pageAddr, io, lvl, Tail.FORWARD);
 
@@ -559,14 +555,14 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
     }
 
     /** */
-    private final GetPageHandler<Invoke> lockTail = new LockTail();
+    private final GetPageHandler<Remove> lockTail = new LockTail();
 
     /**
      *
      */
-    private class LockTail extends GetPageHandler<Invoke> {
+    private class LockTail extends GetPageHandler<Remove> {
         /** {@inheritDoc} */
-        @Override public Result run0(Page page, long pageAddr, BPlusIO<L> io, Invoke r, int lvl)
+        @Override public Result run0(Page page, long pageAddr, BPlusIO<L> io, Remove r, int lvl)
             throws IgniteCheckedException {
             assert lvl > 0 : lvl; // We are not at the bottom.
 
@@ -1405,6 +1401,11 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
         return res != null ? res : false;
     }
 
+    /** {@inheritDoc} */
+    @Override public void invoke(L key, InvokeClosure<T> c) throws IgniteCheckedException {
+        // TODO
+    }
+
     /**
      * @param row Lookup row.
      * @param needOld {@code True} if need return removed row.
@@ -1412,35 +1413,15 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
      * @throws IgniteCheckedException If failed.
      */
     private T doRemove(L row, boolean needOld) throws IgniteCheckedException {
-        return doInvoke(row, needOld, null);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override public void invoke(L key, InvokeClosure<T> c) throws IgniteCheckedException {
-        assert c != null;
-
-        doInvoke(key, false, c);
-    }
-
-    /**
-     * @param row Lookup row.
-     * @param needOld {@code True} if need return removed row.
-     * @param c Invoke closure or {@code null} if it is just a plain remove operation.
-     * @return Removed row.
-     * @throws IgniteCheckedException If failed.
-     */
-    private T doInvoke(L row, boolean needOld, InvokeClosure<T> c) throws IgniteCheckedException {
         checkDestroyed();
 
-        Invoke r = new Invoke(row, needOld, c);
+        Remove r = new Remove(row, needOld);
 
         try {
             for (;;) {
                 r.init();
 
-                switch (invokeDown(r, r.rootId, 0L, 0L, r.rootLvl)) {
+                switch (removeDown(r, r.rootId, 0L, 0L, r.rootLvl)) {
                     case RETRY:
                     case RETRY_ROOT:
                         checkInterrupted();
@@ -1465,7 +1446,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
                         assert r.isFinished();
 
-                        return r.oldRow;
+                        return r.rmvd;
                 }
             }
         }
@@ -1494,7 +1475,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
      * @return Result code.
      * @throws IgniteCheckedException If failed.
      */
-    private Result invokeDown(final Invoke r, final long pageId, final long backId, final long fwdId, final int lvl)
+    private Result removeDown(final Remove r, final long pageId, final long backId, final long fwdId, final int lvl)
         throws IgniteCheckedException {
         assert lvl >= 0 : lvl;
 
@@ -1529,7 +1510,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
                         // Intentional fallthrough.
                     case GO_DOWN:
-                        res = invokeDown(r, r.pageId, r.backId, r.fwdId, lvl - 1);
+                        res = removeDown(r, r.pageId, r.backId, r.fwdId, lvl - 1);
 
                         if (res == RETRY) {
                             checkInterrupted();
@@ -1549,13 +1530,8 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                     case NOT_FOUND:
                         // We are at the bottom.
                         assert lvl == 0 : lvl;
-                        assert r.invokeType != null;
 
-                        if (r.invokeType == INSERT) {
-                            // TODO insert
-                        }
-                        else
-                            r.finish();
+                        r.finish();
 
                         return res;
 
@@ -1563,29 +1539,11 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                         // We must be at the bottom here, just need to remove row from the current page.
                         assert lvl == 0 : lvl;
 
-                        switch (r.invokeType) {
-                            case REPLACE: {
-                                // TODO replace
-                                break;
-                            }
+                        res = r.removeFromLeaf(pageId, page, backId, fwdId);
 
-                            case REMOVE: {
-                                res = r.removeFromLeaf(pageId, page, backId, fwdId);
-
-                                if (res == FOUND && r.tail == null) {
-                                    // Finish if we don't need to do any merges.
-                                    r.finish();
-                                }
-
-                                break;
-                            }
-
-                            case NOOP:
-                                break;
-
-                            case INSERT: // We can not have INSERT here since we have found a row.
-                            default:
-                                throw new IllegalStateException("Type: " + r.invokeType);
+                        if (res == FOUND && r.tail == null) {
+                            // Finish if we don't need to do any merges.
+                            r.finish();
                         }
 
                         return res;
@@ -2478,7 +2436,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
     /**
      * Remove operation.
      */
-    private final class Invoke extends Get implements ReuseBag {
+    private final class Remove extends Get implements ReuseBag {
         /** We may need to lock part of the tree branch from the bottom to up for multiple levels. */
         private Tail<L> tail;
 
@@ -2488,8 +2446,8 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
         /** */
         Bool needMergeEmptyBranch = FALSE;
 
-        /** Updated or removed row. */
-        private T oldRow;
+        /** Removed row. */
+        private T rmvd;
 
         /** Current page. */
         private Page page;
@@ -2500,64 +2458,14 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
         /** */
         private final boolean needOld;
 
-        /** */
-        private final InvokeClosure<T> c;
-
-        /** */
-        private boolean closureInvoked;
-
-        /** */
-        private InvokeType invokeType;
-
         /**
          * @param row Row.
          * @param needOld {@code True} If need return old value.
-         * @param c Invoke closure or {@code null} if it is just a plain remove operation.
          */
-        private Invoke(L row, boolean needOld, InvokeClosure<T> c) {
+        private Remove(L row, boolean needOld) {
             super(row);
 
             this.needOld = needOld;
-            this.c = c;
-        }
-
-        /**
-         * @return Operation type or {@code null} if it is unknown yet. When the closure is invoked
-         *      we must know exact operation type. Note that even if the operation type is known
-         *      from the beginning it is allowed to change after the closure invocation, for example
-         *      initially it was {@code PUT} but became {@code NOOP}.
-         */
-        private OperationType getOperationType() {
-            return c == null ? OperationType.REMOVE : c.operationType();
-        }
-
-        /**
-         * @param rowFound If the old row was found.
-         */
-        private void setupInvokeType(boolean rowFound) {
-            if (invokeType != null)
-                return;
-
-            OperationType opType = getOperationType();
-
-            assert opType != null; // We do this always after the closure has been invoked.
-
-            switch (opType) {
-                case NOOP:
-                    invokeType = NOOP;
-                    break;
-
-                case PUT:
-                    invokeType = rowFound ? REPLACE : INSERT;
-                    break;
-
-                case REMOVE:
-                    invokeType = REMOVE;
-                    break;
-
-                default:
-                    throw new IllegalStateException("Operation type: " + opType);
-            }
         }
 
         /** {@inheritDoc} */
@@ -2603,40 +2511,9 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
         }
 
         /** {@inheritDoc} */
-        @Override boolean notFound(BPlusIO<L> io, long pageAddr, int idx, int lvl) throws IgniteCheckedException {
+        @Override boolean notFound(BPlusIO<L> io, long pageAddr, int idx, int lvl) {
             if (lvl == 0) {
                 assert tail == null;
-
-                doInvokeClosure(null, 0L, 0);
-
-                return true;
-            }
-
-            return false;
-        }
-
-        /**
-         * @param io Page IO.
-         * @param pageAddr Page address.
-         * @param idx Index of found entry.
-         * @throws IgniteCheckedException If failed.
-         */
-        private void doInvokeClosure(BPlusIO<L> io, long pageAddr, int idx) throws IgniteCheckedException {
-            boolean rowFound = io != null;
-
-            if (c != null && !closureInvoked) {
-                c.call(rowFound ? getRow(io, pageAddr, idx) : null);
-
-                closureInvoked = true;
-            }
-
-            setupInvokeType(rowFound);
-        }
-
-        /** {@inheritDoc} */
-        @Override boolean found(BPlusIO<L> io, long pageAddr, int idx, int lvl) throws IgniteCheckedException {
-            if (lvl == 0) {
-                doInvokeClosure(io, pageAddr, idx);
 
                 return true;
             }
@@ -2732,7 +2609,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
          * @return {@code true} If already removed from leaf.
          */
         private boolean isRemoved() {
-            return oldRow != null;
+            return rmvd != null;
         }
 
         /**
@@ -3009,7 +2886,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
             assert !isRemoved(): "already removed";
 
             // Detach the row.
-            oldRow = needOld ? getRow(io, pageAddr, idx) : (T)Boolean.TRUE;
+            rmvd = needOld ? getRow(io, pageAddr, idx) : (T)Boolean.TRUE;
 
             doRemove(page, io, pageAddr, cnt, idx);
 
