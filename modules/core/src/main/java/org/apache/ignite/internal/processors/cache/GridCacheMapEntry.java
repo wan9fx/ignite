@@ -42,6 +42,7 @@ import org.apache.ignite.internal.pagemem.wal.record.DataRecord;
 import org.apache.ignite.internal.processors.affinity.AffinityTopologyVersion;
 import org.apache.ignite.internal.processors.cache.GridCacheUpdateAtomicResult.UpdateOutcome;
 import org.apache.ignite.internal.processors.cache.database.CacheDataRow;
+import org.apache.ignite.internal.processors.cache.database.CacheDataRowAdapter;
 import org.apache.ignite.internal.processors.cache.distributed.dht.GridDhtCacheEntry;
 import org.apache.ignite.internal.processors.cache.distributed.dht.GridDhtLocalPartition;
 import org.apache.ignite.internal.processors.cache.distributed.dht.atomic.GridDhtAtomicAbstractUpdateFuture;
@@ -1607,7 +1608,13 @@ public abstract class GridCacheMapEntry extends GridMetadataAwareAdapter impleme
 
             key.valueBytes(cctx.cacheObjectContext());
 
-            cctx.offheap().invoke(key, localPartition(), c);
+            if (isNear()) {
+                CacheDataRow dataRow = val != null ? new CacheDataRowAdapter(key, val, ver, expireTimeExtras()) : null;
+
+                c.call(dataRow);
+            }
+            else
+                cctx.offheap().invoke(key, localPartition(), c);
 
             GridCacheUpdateAtomicResult updateRes = c.updateRes;
 
@@ -1686,34 +1693,32 @@ public abstract class GridCacheMapEntry extends GridMetadataAwareAdapter impleme
 
             CacheObject evtOld = null;
 
-            if (evt) {
-                Object transformClo = op == TRANSFORM ? writeObj : null;
+            if (evt && op == TRANSFORM && cctx.events().isRecordable(EVT_CACHE_OBJECT_READ)) {
+                assert writeObj instanceof EntryProcessor : writeObj;
 
-                if (transformClo != null && cctx.events().isRecordable(EVT_CACHE_OBJECT_READ)) {
-                    evtOld = cctx.unwrapTemporary(oldVal);
+                evtOld = cctx.unwrapTemporary(oldVal);
 
-                    transformClo = EntryProcessorResourceInjectorProxy.unwrap(transformClo);
+                Object transformClo = EntryProcessorResourceInjectorProxy.unwrap(writeObj);
 
-                    cctx.events().addEvent(partition(),
-                        key,
-                        evtNodeId,
-                        null,
-                        newVer,
-                        EVT_CACHE_OBJECT_READ,
-                        evtOld, evtOld != null,
-                        evtOld, evtOld != null,
-                        subjId,
-                        transformClo.getClass().getName(),
-                        taskName,
-                        keepBinary);
-                }
+                cctx.events().addEvent(partition(),
+                    key,
+                    evtNodeId,
+                    null,
+                    newVer,
+                    EVT_CACHE_OBJECT_READ,
+                    evtOld, evtOld != null,
+                    evtOld, evtOld != null,
+                    subjId,
+                    transformClo.getClass().getName(),
+                    taskName,
+                    keepBinary);
             }
 
             if (updateRes.success()) {
                 if (c.op == GridCacheOperation.UPDATE) {
-                    assert c.newRow != null : c;
+                    assert (isNear() && val != null) || c.newRow != null : c;
 
-                    updateVal = c.newRow.value();
+                    updateVal = isNear() ? val : c.newRow.value();
 
                     assert updateVal != null : c;
 
@@ -3942,7 +3947,7 @@ public abstract class GridCacheMapEntry extends GridMetadataAwareAdapter impleme
 
         /** {@inheritDoc} */
         @Override public void call(@Nullable CacheDataRow oldRow) throws IgniteCheckedException {
-            assert oldRow == null || oldRow.link() != 0 : oldRow;
+            assert entry.isNear() || oldRow == null || oldRow.link() != 0 : oldRow;
 
             this.oldRow = oldRow;
 
@@ -4068,8 +4073,11 @@ public abstract class GridCacheMapEntry extends GridMetadataAwareAdapter impleme
                     conflictVer);
             }
 
-            if (op == UPDATE)
+            if (op == UPDATE) {
+                assert writeObj != null;
+
                 update(conflictCtx, invokeRes);
+            }
             else {
                 assert op == DELETE && writeObj == null : op;
 
@@ -4124,13 +4132,11 @@ public abstract class GridCacheMapEntry extends GridMetadataAwareAdapter impleme
                     else if (newSysTtl == CU.TTL_ZERO) {
                         op = GridCacheOperation.DELETE;
 
-                        newSysTtl = CU.TTL_NOT_CHANGED;
-                        newSysExpireTime = CU.EXPIRE_TIME_CALCULATE;
+                        writeObj = null;
 
-                        newTtl = CU.TTL_ETERNAL;
-                        newExpireTime = CU.EXPIRE_TIME_ETERNAL;
+                        remove(conflictCtx, invokeRes);
 
-                        updated = null;
+                        return;
                     }
                     else {
                         newSysExpireTime = CU.EXPIRE_TIME_CALCULATE;
@@ -4203,16 +4209,20 @@ public abstract class GridCacheMapEntry extends GridMetadataAwareAdapter impleme
 
             entry.logUpdate(op, updated, newVer, newExpireTime, updateCntr0);
 
-            newRow = entry.localPartition().dataStore().createRow(entry.key,
-                updated,
-                newVer,
-                newExpireTime,
-                oldRow);
+            if (!entry.isNear()) {
+                newRow = entry.localPartition().dataStore().createRow(entry.key,
+                    updated,
+                    newVer,
+                    newExpireTime,
+                    oldRow);
+
+                treeOp = oldRow != null && oldRow.link() == newRow.link() ?
+                    IgniteTree.OperationType.NOOP : IgniteTree.OperationType.PUT;
+            }
+            else
+                treeOp = IgniteTree.OperationType.PUT;
 
             entry.update(updated, newExpireTime, newTtl, newVer, true);
-
-            treeOp = oldRow != null && oldRow.link() == newRow.link() ?
-                IgniteTree.OperationType.NOOP : IgniteTree.OperationType.PUT;
 
             updateRes = new GridCacheUpdateAtomicResult(UpdateOutcome.SUCCESS,
                 oldVal,

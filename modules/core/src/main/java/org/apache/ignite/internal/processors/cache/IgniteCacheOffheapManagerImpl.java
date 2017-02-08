@@ -907,6 +907,9 @@ public class IgniteCacheOffheapManagerImpl extends GridCacheManagerAdapter imple
             if (oldRow == null || indexingEnabled)
                 return false;
 
+            if (oldRow.expireTime() != dataRow.expireTime())
+                return false;
+
             CacheObjectContext coCtx = cctx.cacheObjectContext();
 
             int oldLen = oldRow.key().valueBytesLength(coCtx) + oldRow.value().valueBytesLength(coCtx);
@@ -926,7 +929,7 @@ public class IgniteCacheOffheapManagerImpl extends GridCacheManagerAdapter imple
                 throw new NodeStoppingException("Operation has been cancelled (node is stopping).");
 
             try {
-                // FIXME IGNITE-4652..
+                // FIXME IGNITE-4652.
                 final boolean FAKE_INVOKE = true;
 
                 if (FAKE_INVOKE) {
@@ -975,8 +978,12 @@ public class IgniteCacheOffheapManagerImpl extends GridCacheManagerAdapter imple
         }
 
         /** {@inheritDoc} */
-        @Override public CacheDataRow createRow(KeyCacheObject key, CacheObject val, GridCacheVersion ver, long expireTime, @Nullable CacheDataRow oldRow)
-            throws IgniteCheckedException {
+        @Override public CacheDataRow createRow(KeyCacheObject key,
+            CacheObject val,
+            GridCacheVersion ver,
+            long expireTime,
+            @Nullable CacheDataRow oldRow) throws IgniteCheckedException
+        {
             DataRow dataRow = new DataRow(key, val, ver, partId, expireTime);
 
             if (canUpdateOldRow(oldRow, dataRow) && rowStore.updateRow(oldRow.link(), dataRow))
