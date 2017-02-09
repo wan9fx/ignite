@@ -1770,7 +1770,8 @@ public abstract class GridCacheMapEntry extends GridMetadataAwareAdapter impleme
                 }
             }
 
-            updateMetrics(c.op, metrics);
+            if (updateRes.success())
+                updateMetrics(c.op, metrics);
 
             // Continuous query filter should be perform under lock.
             if (lsnrs != null) {
