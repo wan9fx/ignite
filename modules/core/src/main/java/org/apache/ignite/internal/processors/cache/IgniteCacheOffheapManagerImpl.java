@@ -1057,6 +1057,9 @@ public class IgniteCacheOffheapManagerImpl extends GridCacheManagerAdapter imple
          * @throws IgniteCheckedException If failed.
          */
         private void finishUpdate(CacheDataRow newRow, @Nullable CacheDataRow oldRow) throws IgniteCheckedException {
+            if (oldRow == null)
+                storageSize.incrementAndGet();
+
             KeyCacheObject key = newRow.key();
 
             long expireTime = newRow.expireTime();
@@ -1093,8 +1096,6 @@ public class IgniteCacheOffheapManagerImpl extends GridCacheManagerAdapter imple
                 if (newRow.link() != oldRow.link())
                     rowStore.removeRow(oldRow.link());
             }
-            else
-                storageSize.incrementAndGet();
 
             if (pendingEntries != null && expireTime != 0)
                 pendingEntries.putx(new PendingRow(expireTime, newRow.link()));
