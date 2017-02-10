@@ -224,8 +224,6 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
             long res = doAskNeighbor(io, pageAddr, back);
 
             if (back) {
-                assert g.getClass() == Remove.class;
-
                 if (io.getForward(pageAddr) != g.backId) // See how g.backId is setup in removeDown for this check.
                     return RETRY;
 
@@ -1402,9 +1400,141 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
     }
 
     /** {@inheritDoc} */
-    @Override public void invoke(L key, InvokeClosure<T> c) throws IgniteCheckedException {
-        // TODO
+    @Override public void invoke(L row, InvokeClosure<T> c) throws IgniteCheckedException {
+        checkDestroyed();
+
+        Invoke x = new Invoke(row, c);
+
+        try {
+            for (;;) {
+                x.init();
+
+                switch (invokeDown(x, x.rootId, 0L, 0L, x.rootLvl)) {
+                    case RETRY:
+                    case RETRY_ROOT:
+                        checkInterrupted();
+
+                        continue;
+
+                    default:
+                        if (x.finishIfNeeded() != FALSE)
+                            return;
+                }
+            }
+        }
+        catch (IgniteCheckedException e) {
+            throw new IgniteCheckedException("Runtime failure on search row: " + row, e);
+        }
+        catch (RuntimeException e) {
+            throw new IgniteException("Runtime failure on search row: " + row, e);
+        }
+        catch (AssertionError e) {
+            throw new AssertionError("Assertion error on search row: " + row, e);
+        }
+        finally {
+            x.releaseAll();
+        }
     }
+
+    /**
+     * @param x Invoke operation.
+     * @param pageId Page ID.
+     * @param backId Expected backward page ID if we are going to the right.
+     * @param fwdId Expected forward page ID.
+     * @param lvl Level.
+     * @return Result code.
+     * @throws IgniteCheckedException If failed.
+     */
+    private Result invokeDown(final Invoke x, final long pageId, final long backId, final long fwdId, final int lvl)
+        throws IgniteCheckedException {
+        assert lvl >= 0 : lvl;
+
+        if (x.isTail(pageId, lvl))
+            return FOUND; // We've already locked this page, so return that we are ok.
+
+        final Page page = page(pageId);
+
+        try {
+            for (;;) {
+                // Init args.
+                x.pageId = pageId;
+                x.fwdId = fwdId;
+                x.backId = backId;
+
+                Result res = readPage(page, this, search, x, lvl, RETRY);
+
+                switch (res) {
+                    case GO_DOWN_X:
+                        assert backId != 0;
+                        assert x.backId == 0; // We did not setup it yet.
+
+                        x.backId = pageId; // Dirty hack to setup a check inside of askNeighbor.
+
+                        // We need to get backId here for our child page, it must be the last child of our back.
+                        res = askNeighbor(backId, x, true);
+
+                        if (res != FOUND)
+                            return res; // Retry.
+
+                        assert x.backId != pageId; // It must be updated in askNeighbor.
+
+                        // Intentional fallthrough.
+                    case GO_DOWN:
+                        res = invokeDown(x, x.pageId, x.backId, x.fwdId, lvl - 1);
+
+                        if (res == RETRY) {
+                            checkInterrupted();
+
+                            continue;
+                        }
+
+                        if (res != RETRY_ROOT) {
+                            switch (x.finishIfNeeded()) {
+                                case DONE:
+                                    return res;
+
+                                case
+
+
+                            }
+                        }
+
+                        return res;
+
+                    case NOT_FOUND:
+                        // We are at the bottom.
+                        assert lvl == 0 : lvl;
+
+                        r.finish();
+
+                        return res;
+
+                    case FOUND:
+                        // We must be at the bottom here, just need to remove row from the current page.
+                        assert lvl == 0 : lvl;
+
+                        res = r.removeFromLeaf(pageId, page, backId, fwdId);
+
+                        if (res == FOUND && r.tail == null) {
+                            // Finish if we don't need to do any merges.
+                            r.finish();
+                        }
+
+                        return res;
+
+                    default:
+                        return res;
+                }
+            }
+        }
+        finally {
+            x.levelExit();
+
+            if (x.canRelease(page, lvl))
+                page.close();
+        }
+    }
+
 
     /**
      * @param row Lookup row.
@@ -1460,9 +1590,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
             throw new AssertionError("Assertion error on search row: " + row, e);
         }
         finally {
-            r.releaseTail();
-
-            r.reuseFreePages();
+            r.releaseAll();
         }
     }
 
@@ -2059,6 +2187,19 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
         }
 
         /**
+         * @param g Other operation to copy from.
+         */
+        final void copyFrom(Get g) {
+            rmvId = g.rmvId;
+            rootLvl = g.rootLvl;
+            row = g.row;
+            pageId = g.pageId;
+            fwdId = g.fwdId;
+            backId = g.backId;
+            shift = g.shift;
+        }
+
+        /**
          * Initialize operation.
          *
          * @throws IgniteCheckedException If failed.
@@ -2430,6 +2571,134 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                     writeUnlock(fwd, fwdPageAddr, true);
                 }
             }
+        }
+    }
+
+    /**
+     * Invoke operation.
+     */
+    private final class Invoke extends Get {
+        /** */
+        private final InvokeClosure<T> clo;
+
+        /** */
+        private boolean closureInvoked;
+
+        /** */
+        private Get op;
+
+        /**
+         * @param row Row.
+         * @param clo Closure.
+         */
+        private Invoke(L row, final InvokeClosure<T> clo) {
+            super(row);
+
+            this.clo = clo;
+        }
+
+        /** {@inheritDoc} */
+        @Override boolean found(BPlusIO<L> io, long pageAddr, int idx, int lvl) throws IgniteCheckedException {
+            if (lvl == 0) {
+                invokeClosure(io, pageAddr, idx);
+
+                return true;
+            }
+
+            return false;
+        }
+
+        /** {@inheritDoc} */
+        @Override boolean notFound(BPlusIO<L> io, long pageAddr, int idx, int lvl) throws IgniteCheckedException {
+            if (lvl == 0) {
+                invokeClosure(null, 0L, 0);
+
+                return true;
+            }
+
+            return false;
+        }
+
+        /**
+         * @param io IO.
+         * @param pageAddr Page address.
+         * @param idx Index of found entry.
+         * @throws IgniteCheckedException If failed.
+         */
+        private void invokeClosure(BPlusIO<L> io, long pageAddr, int idx) throws IgniteCheckedException {
+            if (closureInvoked)
+                return;
+
+            boolean rowFound = io != null;
+
+            clo.call(rowFound ? getRow(io, pageAddr, idx) : null);
+
+            closureInvoked = true;
+
+            switch (clo.operationType()) {
+                case PUT:
+                    T newRow = clo.newRow();
+
+                    assert newRow != null;
+
+                    op = new Put(newRow, false);
+
+                    break;
+
+                case REMOVE:
+                    op = new Remove(row, false);
+
+                    break;
+
+                case NOOP:
+                    break;
+
+                default:
+                    throw new IllegalStateException();
+            }
+        }
+
+        /** {@inheritDoc} */
+        @Override boolean canRelease(Page page, int lvl) {
+            if (page == null)
+                return false;
+
+            if (op == null)
+                return true;
+
+            return op.canRelease(page, lvl);
+        }
+
+        /**
+         * @return {@code true} If the operation was finished successfully before this call or right now.
+         */
+        private Bool finishIfNeeded() {
+            // TODO
+            return DONE;
+        }
+
+        /**
+         * @param pageId Page ID.
+         * @param lvl Level.
+         * @return {@code true} If it is a {@link Remove} and the page is in tail.
+         */
+        private boolean isTail(long pageId, int lvl) {
+            return op != null && op.getClass() == Remove.class && ((Remove)op).isTail(pageId, lvl);
+        }
+
+        /**
+         */
+        private void levelExit() {
+            if (op != null && op.getClass() == Remove.class)
+                ((Remove)op).page = null;
+        }
+
+        /**
+         * Release all the resources by the end of operation.
+         */
+        private void releaseAll() throws IgniteCheckedException {
+            if (op != null && op.getClass() == Remove.class)
+                ((Remove)op).releaseAll();
         }
     }
 
@@ -3363,6 +3632,14 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
         public boolean checkTailLevel(int rootLvl) {
             return tail == null || tail.lvl < rootLvl;
         }
+
+        /**
+         * @throws IgniteCheckedException If failed.
+         */
+        public void releaseAll() throws IgniteCheckedException {
+            releaseTail();
+            reuseFreePages();
+        }
     }
 
     /**
@@ -3945,22 +4222,5 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
         /** */
         DONE
-    }
-
-    /**
-     * Type of invoke.
-     */
-    enum InvokeType {
-        /** */
-        INSERT,
-
-        /** */
-        REPLACE,
-
-        /** */
-        REMOVE,
-
-        /** */
-        NOOP
     }
 }
