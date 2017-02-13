@@ -227,12 +227,12 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                 if (io.getForward(pageAddr) != g.backId) // See how g.backId is setup in removeDown for this check.
                     return RETRY;
 
-                g.backId = res;
+                g.backId(res);
             }
             else {
                 assert isBack == FALSE.ordinal() : isBack;
 
-                g.fwdId = res;
+                g.fwdId(res);
             }
 
             return FOUND;
@@ -255,7 +255,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
             boolean needBackIfRouting = g.backId != 0;
 
-            g.backId = 0; // Usually we'll go left down and don't need it.
+            g.backId(0L); // Usually we'll go left down and don't need it.
 
             int cnt = io.getCount(pageAddr);
             int idx = findInsertionPoint(io, pageAddr, 0, cnt, g.row, g.shift);
@@ -280,13 +280,13 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
             assert !io.isLeaf() : io;
 
             // If idx == cnt then we go right down, else left down: getLeft(cnt) == getRight(cnt - 1).
-            g.pageId = inner(io).getLeft(pageAddr, idx);
+            g.pageId(inner(io).getLeft(pageAddr, idx));
 
             // If we see the tree in consistent state, then our right down page must be forward for our left down page,
             // we need to setup fwdId and/or backId to be able to check this invariant on lower level.
             if (idx < cnt) {
                 // Go left down here.
-                g.fwdId = inner(io).getRight(pageAddr, idx);
+                g.fwdId(inner(io).getRight(pageAddr, idx));
             }
             else {
                 // Go right down here or it is an empty branch.
@@ -299,7 +299,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
                 // Setup fwdId.
                 if (fwdId == 0)
-                    g.fwdId = 0;
+                    g.fwdId(0L);
                 else {
                     // We can do askNeighbor on forward page here because we always take locks in forward direction.
                     Result res = askNeighbor(fwdId, g, false);
@@ -310,7 +310,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
                 // Setup backId.
                 if (cnt != 0) // It is not a routing page and we are going to the right, can get backId here.
-                    g.backId = inner(io).getLeft(pageAddr, cnt - 1);
+                    g.backId(inner(io).getLeft(pageAddr, cnt - 1));
                 else if (needBackIfRouting) {
                     // Can't get backId here because of possible deadlock and it is only needed for remove operation.
                     return GO_DOWN_X;
@@ -1401,6 +1401,8 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
     /** {@inheritDoc} */
     @Override public void invoke(L row, InvokeClosure<T> c) throws IgniteCheckedException {
+        assert c != null;
+
         checkDestroyed();
 
         Invoke x = new Invoke(row, c);
@@ -1457,9 +1459,9 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
         try {
             for (;;) {
                 // Init args.
-                x.pageId = pageId;
-                x.fwdId = fwdId;
-                x.backId = backId;
+                x.pageId(pageId);
+                x.fwdId(fwdId);
+                x.backId(backId);
 
                 Result res = readPage(page, this, search, x, lvl, RETRY);
 
@@ -1468,7 +1470,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                         assert backId != 0;
                         assert x.backId == 0; // We did not setup it yet.
 
-                        x.backId = pageId; // Dirty hack to setup a check inside of askNeighbor.
+                        x.backId(pageId); // Dirty hack to setup a check inside of askNeighbor.
 
                         // We need to get backId here for our child page, it must be the last child of our back.
                         res = askNeighbor(backId, x, true);
@@ -1493,9 +1495,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                                 case DONE:
                                     return res;
 
-                                case
-
-
+                                    // TODO
                             }
                         }
 
@@ -1503,22 +1503,22 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
                     case NOT_FOUND:
                         // We are at the bottom.
-                        assert lvl == 0 : lvl;
-
-                        r.finish();
+//                        assert lvl == 0 : lvl;
+//
+//                        r.finish();
 
                         return res;
 
                     case FOUND:
                         // We must be at the bottom here, just need to remove row from the current page.
-                        assert lvl == 0 : lvl;
-
-                        res = r.removeFromLeaf(pageId, page, backId, fwdId);
-
-                        if (res == FOUND && r.tail == null) {
-                            // Finish if we don't need to do any merges.
-                            r.finish();
-                        }
+//                        assert lvl == 0 : lvl;
+//
+//                        res = r.removeFromLeaf(pageId, page, backId, fwdId);
+//
+//                        if (res == FOUND && r.tail == null) {
+//                            // Finish if we don't need to do any merges.
+//                            r.finish();
+//                        }
 
                         return res;
 
@@ -2188,15 +2188,17 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
         /**
          * @param g Other operation to copy from.
+         * @return {@code this}.
          */
-        final void copyFrom(Get g) {
+        final Get copyFrom(Get g) {
             rmvId = g.rmvId;
             rootLvl = g.rootLvl;
-            row = g.row;
             pageId = g.pageId;
             fwdId = g.fwdId;
             backId = g.backId;
             shift = g.shift;
+
+            return this;
         }
 
         /**
@@ -2258,6 +2260,27 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
          */
         boolean canRelease(Page page, int lvl) {
             return page != null;
+        }
+
+        /**
+         * @param backId Back page ID.
+         */
+        void backId(long backId) {
+            this.backId = backId;
+        }
+
+        /**
+         * @param pageId Page ID.
+         */
+        void pageId(long pageId) {
+            this.pageId = pageId;
+        }
+
+        /**
+         * @param fwdId Forward page ID.
+         */
+        void fwdId(long fwdId) {
+            this.fwdId = fwdId;
         }
     }
 
@@ -2598,6 +2621,30 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
         }
 
         /** {@inheritDoc} */
+        @Override void pageId(long pageId) {
+            this.pageId = pageId;
+
+            if (op != null)
+                op.pageId = pageId;
+        }
+
+        /** {@inheritDoc} */
+        @Override void fwdId(long fwdId) {
+            this.fwdId = fwdId;
+
+            if (op != null)
+                op.fwdId = fwdId;
+        }
+
+        /** {@inheritDoc} */
+        @Override void backId(long backId) {
+            this.backId = backId;
+
+            if (op != null)
+                op.backId = backId;
+        }
+
+        /** {@inheritDoc} */
         @Override boolean found(BPlusIO<L> io, long pageAddr, int idx, int lvl) throws IgniteCheckedException {
             if (lvl == 0) {
                 invokeClosure(io, pageAddr, idx);
@@ -2629,11 +2676,11 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
             if (closureInvoked)
                 return;
 
+            closureInvoked = true;
+
             boolean rowFound = io != null;
 
             clo.call(rowFound ? getRow(io, pageAddr, idx) : null);
-
-            closureInvoked = true;
 
             switch (clo.operationType()) {
                 case PUT:
@@ -2641,12 +2688,12 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
                     assert newRow != null;
 
-                    op = new Put(newRow, false);
+                    op = new Put(newRow, false).copyFrom(this);
 
                     break;
 
                 case REMOVE:
-                    op = new Remove(row, false);
+                    op = new Remove(row, false).copyFrom(this);
 
                     break;
 
