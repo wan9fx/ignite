@@ -2055,31 +2055,10 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                         assert p.pageId != pageId;
                         assert p.fwdId != fwdId || fwdId == 0;
 
-                        // Need to replace key in inner page. There is no race because we keep tail lock after split.
-                        if (p.needReplaceInner == TRUE) {
-                            p.needReplaceInner = FALSE; // Protect from retries.
+                        res = p.tryReplaceInner(page, pageId, fwdId, lvl);
 
-                            long oldFwdId = p.fwdId;
-                            long oldPageId = p.pageId;
-
-                            // Set old args.
-                            p.fwdId = fwdId;
-                            p.pageId = pageId;
-
-                            res = writePage(pageMem, page, this, replace, p, lvl, RETRY);
-
-                            // Restore args.
-                            p.pageId = oldPageId;
-                            p.fwdId = oldFwdId;
-
-                            if (res != FOUND)
-                                return res; // Need to retry.
-
-                            p.needReplaceInner = DONE; // We can have only single matching inner key.
-                        }
-
-                        // Go down recursively.
-                        res = putDown(p, p.pageId, p.fwdId, lvl - 1);
+                        if (res != RETRY) // Go down recursively.
+                            res = putDown(p, p.pageId, p.fwdId, lvl - 1);
 
                         if (res == RETRY_ROOT || p.isFinished())
                             return res;
@@ -2594,6 +2573,42 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                     writeUnlock(fwd, fwdPageAddr, true);
                 }
             }
+        }
+
+        /**
+         * @param page Page.
+         * @param pageId Page ID.
+         * @param fwdId Forward ID.
+         * @param lvl Level.
+         * @return Result.
+         * @throws IgniteCheckedException If failed.
+         */
+        private Result tryReplaceInner(Page page, long pageId, long fwdId, int lvl)
+            throws IgniteCheckedException {
+            // Need to replace key in inner page. There is no race because we keep tail lock after split.
+            if (needReplaceInner == TRUE) {
+                needReplaceInner = FALSE; // Protect from retries.
+
+                long oldFwdId = this.fwdId;
+                long oldPageId = this.pageId;
+
+                // Set old args.
+                this.fwdId = fwdId;
+                this.pageId = pageId;
+
+                Result res = writePage(pageMem, page, BPlusTree.this, replace, this, lvl, RETRY);
+
+                // Restore args.
+                this.pageId = oldPageId;
+                this.fwdId = oldFwdId;
+
+                if (res == RETRY)
+                    return res;
+
+                needReplaceInner = DONE; // We can have only a single matching inner key.
+            }
+
+            return FOUND;
         }
     }
 
