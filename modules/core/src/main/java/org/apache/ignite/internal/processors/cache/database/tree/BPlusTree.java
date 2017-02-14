@@ -358,7 +358,15 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                 // Inner replace state must be consistent by the end of the operation.
                 assert p.needReplaceInner == FALSE || p.needReplaceInner == DONE : p.needReplaceInner;
 
-                p.finish();
+                // Need to replace inner key if now we are replacing the rightmost row and have a forward page.
+                if (canGetRowFromInner && idx + 1 == cnt && p.fwdId != 0L && p.needReplaceInner == FALSE) {
+                    // Can happen only for invoke, otherwise inner key must be replaced on the way down.
+                    assert p.invoke;
+
+                    p.needReplaceInner = TRUE;
+                }
+                else
+                    p.finish();
             }
 
             io.store(pageAddr, idx, newRow, null);
