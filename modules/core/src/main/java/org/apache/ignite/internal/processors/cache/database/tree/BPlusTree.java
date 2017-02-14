@@ -355,10 +355,10 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                 // Get old row in leaf page to reduce contention at upper level.
                 p.oldRow = p.needOld ? getRow(io, pageAddr, idx) : (T)Boolean.TRUE;
 
-                p.finish();
-
                 // Inner replace state must be consistent by the end of the operation.
                 assert p.needReplaceInner == FALSE || p.needReplaceInner == DONE : p.needReplaceInner;
+
+                p.finish();
             }
 
             io.store(pageAddr, idx, newRow, null);
@@ -2071,21 +2071,13 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                     case FOUND: // Do replace.
                         assert lvl == 0 : "This replace can happen only at the bottom level.";
 
-                        // Init args.
-                        p.pageId = pageId;
-                        p.fwdId = fwdId;
-
-                        return writePage(pageMem, page, this, replace, p, lvl, RETRY);
+                        return p.tryReplace(page, pageId, fwdId, lvl);
 
                     case NOT_FOUND: // Do insert.
                         assert lvl == p.btmLvl : "must insert at the bottom level";
                         assert p.needReplaceInner == FALSE : p.needReplaceInner + " " + lvl;
 
-                        // Init args.
-                        p.pageId = pageId;
-                        p.fwdId = fwdId;
-
-                        return writePage(pageMem, page, this, insert, p, lvl, RETRY);
+                        return p.tryInsert(page, pageId, fwdId, lvl);
 
                     default:
                         return res;
@@ -2133,28 +2125,31 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
      */
     private abstract class Get {
         /** */
-        protected long rmvId;
+        long rmvId;
 
         /** Starting point root level. May be outdated. Must be modified only in {@link Get#init()}. */
-        protected int rootLvl;
+        int rootLvl;
 
         /** Starting point root ID. May be outdated. Must be modified only in {@link Get#init()}. */
-        protected long rootId;
+        long rootId;
 
         /** */
-        protected L row;
+        L row;
 
         /** In/Out parameter: Page ID. */
-        protected long pageId;
+        long pageId;
 
         /** In/Out parameter: expected forward page ID. */
-        protected long fwdId;
+        long fwdId;
 
         /** In/Out parameter: in case of right turn this field will contain backward page ID for the child. */
-        protected long backId;
+        long backId;
 
         /** */
         int shift;
+
+        /** If {@code true}, then this operation is a part of invoke. */
+        boolean invoke;
 
         /**
          * @param row Row.
@@ -2268,7 +2263,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
      */
     private final class GetOne extends Get {
         /** */
-        private final RowClosure<L, ?> c;
+        final RowClosure<L, ?> c;
 
         /**
          * @param row Row.
@@ -2298,7 +2293,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
      */
     private final class GetCursor extends Get {
         /** */
-        private ForwardCursor cursor;
+        ForwardCursor cursor;
 
         /**
          * @param lower Lower bound.
@@ -2335,31 +2330,31 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
      */
     private final class Put extends Get {
         /** Right child page ID for split row. */
-        private long rightId;
+        long rightId;
 
         /** Replaced row if any. */
-        private T oldRow;
+        T oldRow;
 
         /**
          * This page is kept locked after split until insert to the upper level will not be finished.
          * It is needed because split row will be "in flight" and if we'll release tail, remove on
          * split row may fail.
          */
-        private Page tail;
+        Page tail;
 
         /** */
-        private long tailPageAddr;
+        long tailPageAddr;
 
         /**
          * Bottom level for insertion (insert can't go deeper). Will be incremented on split on each level.
          */
-        private short btmLvl;
+        short btmLvl;
 
         /** */
         Bool needReplaceInner = FALSE;
 
         /** */
-        private final boolean needOld;
+        final boolean needOld;
 
         /**
          * @param row Row.
@@ -2606,9 +2601,43 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                     return res;
 
                 needReplaceInner = DONE; // We can have only a single matching inner key.
+
+                return FOUND;
             }
 
-            return FOUND;
+            return NOT_FOUND;
+        }
+
+        /**
+         * @param page Page.
+         * @param pageId Page ID.
+         * @param fwdId Forward ID.
+         * @param lvl Level.
+         * @return Result.
+         * @throws IgniteCheckedException If failed.
+         */
+        private Result tryInsert(Page page, long pageId, long fwdId, int lvl) throws IgniteCheckedException {
+            // Init args.
+            this.pageId = pageId;
+            this.fwdId = fwdId;
+
+            return writePage(pageMem, page, BPlusTree.this, insert, this, lvl, RETRY);
+        }
+
+        /**
+         * @param page Page.
+         * @param pageId Page ID.
+         * @param fwdId Forward ID.
+         * @param lvl Level.
+         * @return Result.
+         * @throws IgniteCheckedException If failed.
+         */
+        public Result tryReplace(Page page, long pageId, long fwdId, int lvl) throws IgniteCheckedException {
+            // Init args.
+            this.pageId = pageId;
+            this.fwdId = fwdId;
+
+            return writePage(pageMem, page, BPlusTree.this, replace, this, lvl, RETRY);
         }
     }
 
@@ -2617,13 +2646,13 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
      */
     private final class Invoke extends Get {
         /** */
-        private final InvokeClosure<T> clo;
+        final InvokeClosure<T> clo;
 
         /** */
-        private boolean closureInvoked;
+        boolean closureInvoked;
 
         /** */
-        private Get op;
+        Get op;
 
         /**
          * @param row Row.
@@ -2669,6 +2698,10 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
         /** {@inheritDoc} */
         @Override boolean found(BPlusIO<L> io, long pageAddr, int idx, int lvl) throws IgniteCheckedException {
+            // If the operation is initialized, then the closure has been called already.
+            if (op != null)
+                return op.found(io, pageAddr, idx, lvl);
+
             if (lvl == 0) {
                 invokeClosure(io, pageAddr, idx);
 
@@ -2680,6 +2713,10 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
         /** {@inheritDoc} */
         @Override boolean notFound(BPlusIO<L> io, long pageAddr, int idx, int lvl) throws IgniteCheckedException {
+            // If the operation is initialized, then the closure has been called already.
+            if (op != null)
+                return op.notFound(io, pageAddr, idx, lvl);
+
             if (lvl == 0) {
                 invokeClosure(null, 0L, 0);
 
@@ -2711,12 +2748,12 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
                     assert newRow != null;
 
-                    op = new Put(newRow, false).copyFrom(this);
+                    op = new Put(newRow, false);
 
                     break;
 
                 case REMOVE:
-                    op = new Remove(row, false).copyFrom(this);
+                    op = new Remove(row, false);
 
                     break;
 
@@ -2725,6 +2762,12 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
                 default:
                     throw new IllegalStateException();
+            }
+
+            if (op != null) {
+                op.copyFrom(this);
+
+                op.invoke = true;
             }
         }
 
@@ -2777,7 +2820,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
      */
     private final class Remove extends Get implements ReuseBag {
         /** We may need to lock part of the tree branch from the bottom to up for multiple levels. */
-        private Tail<L> tail;
+        Tail<L> tail;
 
         /** */
         Bool needReplaceInner = FALSE;
@@ -2786,16 +2829,16 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
         Bool needMergeEmptyBranch = FALSE;
 
         /** Removed row. */
-        private T rmvd;
+        T rmvd;
 
         /** Current page. */
-        private Page page;
+        Page page;
 
         /** */
-        private Object freePages;
+        Object freePages;
 
         /** */
-        private final boolean needOld;
+        final boolean needOld;
 
         /**
          * @param row Row.
