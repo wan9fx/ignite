@@ -363,7 +363,10 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                     // Can happen only for invoke, otherwise inner key must be replaced on the way down.
                     assert p.invoke;
 
-                    p.needReplaceInner = TRUE;
+                    // We need to restart the operation from root to perform inner replace.
+                    // On the second pass we will not get here (will avoid infinite loop) because
+                    // needReplaceInner will be DONE or our key will not be the rightmost anymore.
+                    return RETRY_ROOT;
                 }
                 else
                     p.finish();
@@ -1515,7 +1518,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                             continue;
                         }
 
-                        // Put does insert on the same level.
+                        // Unfinished Put does insertion on the same level.
                         if (x.isPut())
                             continue;
 
