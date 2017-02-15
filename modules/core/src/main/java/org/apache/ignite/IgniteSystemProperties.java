@@ -65,6 +65,9 @@ public final class IgniteSystemProperties {
      */
     public static final String IGNITE_NO_DISCO_ORDER = "IGNITE_NO_DISCO_ORDER";
 
+    /** Defines reconnect delay in milliseconds for client node that was failed forcible. */
+    public static final String IGNITE_DISCO_FAILED_CLIENT_RECONNECT_DELAY = "IGNITE_DISCO_FAILED_CLIENT_RECONNECT_DELAY";
+
     /**
      * If this system property is set to {@code false} - no checks for new versions will
      * be performed by Ignite. By default, Ignite periodically checks for the new
@@ -279,6 +282,9 @@ public final class IgniteSystemProperties {
     /** Maximum size for atomic cache queue delete history (default is 200 000 entries per partition). */
     public static final String IGNITE_ATOMIC_CACHE_DELETE_HISTORY_SIZE = "IGNITE_ATOMIC_CACHE_DELETE_HISTORY_SIZE";
 
+    /** Ttl of removed cache entries (ms). */
+    public static final String IGNITE_CACHE_REMOVED_ENTRIES_TTL = "IGNITE_CACHE_REMOVED_ENTRIES_TTL";
+
     /** Maximum amount of concurrent updates per system thread in atomic caches in case of PRIMARY_SYNC or FULL_ASYNC
      * write synchronization mode. If this limit is exceeded then update will be performed with FULL_SYNC
      * synchronization mode. If value is {@code 0} then limit is unbounded.
@@ -323,6 +329,14 @@ public final class IgniteSystemProperties {
      * If this property set then debug console will be opened for H2 indexing SPI.
      */
     public static final String IGNITE_H2_DEBUG_CONSOLE = "IGNITE_H2_DEBUG_CONSOLE";
+
+    /**
+     * This property allows to specify user defined port which H2 indexing SPI will use
+     * to start H2 debug console on. If this property is not set or set to 0, H2 debug
+     * console will use system-provided dynamic port.
+     * This property is only relevant when {@link #IGNITE_H2_DEBUG_CONSOLE} property is set.
+     */
+    public static final String IGNITE_H2_DEBUG_CONSOLE_PORT = "IGNITE_H2_DEBUG_CONSOLE_PORT";
 
     /**
      * If this property is set to {@code true} then shared memory space native debug will be enabled.

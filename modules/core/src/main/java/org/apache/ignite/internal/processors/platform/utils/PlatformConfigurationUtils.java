@@ -59,11 +59,13 @@ import org.apache.ignite.internal.binary.BinaryRawReaderEx;
 import org.apache.ignite.internal.binary.BinaryRawWriterEx;
 import org.apache.ignite.internal.processors.platform.cache.affinity.PlatformAffinityFunction;
 import org.apache.ignite.internal.processors.platform.cache.expiry.PlatformExpiryPolicyFactory;
+import org.apache.ignite.internal.processors.platform.plugin.cache.PlatformCachePluginConfiguration;
 import org.apache.ignite.platform.dotnet.PlatformDotNetAffinityFunction;
 import org.apache.ignite.platform.dotnet.PlatformDotNetBinaryConfiguration;
 import org.apache.ignite.platform.dotnet.PlatformDotNetBinaryTypeConfiguration;
 import org.apache.ignite.platform.dotnet.PlatformDotNetCacheStoreFactoryNative;
 import org.apache.ignite.platform.dotnet.PlatformDotNetConfiguration;
+import org.apache.ignite.plugin.CachePluginConfiguration;
 import org.apache.ignite.spi.communication.CommunicationSpi;
 import org.apache.ignite.spi.communication.tcp.TcpCommunicationSpi;
 import org.apache.ignite.spi.communication.tcp.TcpCommunicationSpiMBean;
@@ -187,8 +189,7 @@ public class PlatformConfigurationUtils {
         if (qryEntCnt > 0) {
             Collection<QueryEntity> entities = new ArrayList<>(qryEntCnt);
 
-            for (int i
-                 = 0; i < qryEntCnt; i++)
+            for (int i = 0; i < qryEntCnt; i++)
                 entities.add(readQueryEntity(in));
 
             ccfg.setQueryEntities(entities);
@@ -200,6 +201,17 @@ public class PlatformConfigurationUtils {
         ccfg.setEvictionPolicy(readEvictionPolicy(in));
         ccfg.setAffinity(readAffinityFunction(in));
         ccfg.setExpiryPolicyFactory(readExpiryPolicyFactory(in));
+
+        int pluginCnt = in.readInt();
+
+        if (pluginCnt > 0) {
+            CachePluginConfiguration[] plugins = new CachePluginConfiguration[pluginCnt];
+
+            for (int i = 0; i < pluginCnt; i++)
+                plugins[i] = new PlatformCachePluginConfiguration(in.readObjectDetached());
+
+            ccfg.setPluginConfigurations(plugins);
+        }
 
         return ccfg;
     }
@@ -815,25 +827,42 @@ public class PlatformConfigurationUtils {
         writeEvictionPolicy(writer, ccfg.getEvictionPolicy());
         writeAffinityFunction(writer, ccfg.getAffinity());
         writeExpiryPolicyFactory(writer, ccfg.getExpiryPolicyFactory());
+
+        CachePluginConfiguration[] plugins = ccfg.getPluginConfigurations();
+        if (plugins != null) {
+            int cnt = 0;
+
+            for (CachePluginConfiguration cfg : plugins) {
+                if (cfg instanceof PlatformCachePluginConfiguration)
+                    cnt++;
+            }
+
+            writer.writeInt(cnt);
+
+            for (CachePluginConfiguration cfg : plugins) {
+                if (cfg instanceof PlatformCachePluginConfiguration)
+                    writer.writeObject(((PlatformCachePluginConfiguration)cfg).nativeCfg());
+            }
+        }
     }
 
     /**
      * Write query entity.
      *
      * @param writer Writer.
-     * @param queryEntity Query entity.
+     * @param qryEntity Query entity.
      */
-    private static void writeQueryEntity(BinaryRawWriter writer, QueryEntity queryEntity) {
-        assert queryEntity != null;
+    private static void writeQueryEntity(BinaryRawWriter writer, QueryEntity qryEntity) {
+        assert qryEntity != null;
 
-        writer.writeString(queryEntity.getKeyType());
-        writer.writeString(queryEntity.getValueType());
+        writer.writeString(qryEntity.getKeyType());
+        writer.writeString(qryEntity.getValueType());
 
         // Fields
-        LinkedHashMap<String, String> fields = queryEntity.getFields();
+        LinkedHashMap<String, String> fields = qryEntity.getFields();
 
         if (fields != null) {
-            Set<String> keyFields = queryEntity.getKeyFields();
+            Set<String> keyFields = qryEntity.getKeyFields();
 
             writer.writeInt(fields.size());
 
@@ -847,7 +876,7 @@ public class PlatformConfigurationUtils {
             writer.writeInt(0);
 
         // Aliases
-        Map<String, String> aliases = queryEntity.getAliases();
+        Map<String, String> aliases = qryEntity.getAliases();
 
         if (aliases != null) {
             writer.writeInt(aliases.size());
@@ -861,7 +890,7 @@ public class PlatformConfigurationUtils {
             writer.writeInt(0);
 
         // Indexes
-        Collection<QueryIndex> indexes = queryEntity.getIndexes();
+        Collection<QueryIndex> indexes = qryEntity.getIndexes();
 
         if (indexes != null) {
             writer.writeInt(indexes.size());

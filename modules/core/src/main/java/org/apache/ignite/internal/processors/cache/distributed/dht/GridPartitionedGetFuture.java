@@ -33,6 +33,7 @@ import org.apache.ignite.internal.cluster.ClusterTopologyCheckedException;
 import org.apache.ignite.internal.cluster.ClusterTopologyServerNotFoundException;
 import org.apache.ignite.internal.processors.affinity.AffinityTopologyVersion;
 import org.apache.ignite.internal.processors.cache.CacheObject;
+import org.apache.ignite.internal.processors.cache.EntryGetResult;
 import org.apache.ignite.internal.processors.cache.GridCacheContext;
 import org.apache.ignite.internal.processors.cache.GridCacheEntryEx;
 import org.apache.ignite.internal.processors.cache.GridCacheEntryInfo;
@@ -353,6 +354,7 @@ public class GridPartitionedGetFuture<K, V> extends CacheDistributedGetFutureAda
                     topVer,
                     subjId,
                     taskName == null ? 0 : taskName.hashCode(),
+                    expiryPlc != null ? expiryPlc.forCreate() : -1L,
                     expiryPlc != null ? expiryPlc.forAccess() : -1L,
                     skipVals,
                     cctx.deploymentEnabled(),
@@ -392,7 +394,7 @@ public class GridPartitionedGetFuture<K, V> extends CacheDistributedGetFutureAda
     ) {
         int part = cctx.affinity().partition(key);
 
-        List<ClusterNode> affNodes = cctx.affinity().nodes(part, topVer);
+        List<ClusterNode> affNodes = cctx.affinity().nodesByPartition(part, topVer);
 
         if (affNodes.isEmpty()) {
             onDone(serverNotFoundError(topVer));
@@ -461,7 +463,7 @@ public class GridPartitionedGetFuture<K, V> extends CacheDistributedGetFutureAda
                     GridCacheVersion ver = null;
 
                     if (needVer) {
-                        T2<CacheObject, GridCacheVersion> res = entry.innerGetVersioned(
+                        EntryGetResult res = entry.innerGetVersioned(
                             null,
                             null,
                             /**update-metrics*/false,
@@ -470,11 +472,12 @@ public class GridPartitionedGetFuture<K, V> extends CacheDistributedGetFutureAda
                             null,
                             taskName,
                             expiryPlc,
-                            !deserializeBinary);
+                            !deserializeBinary,
+                            null);
 
                         if (res != null) {
-                            v = res.get1();
-                            ver = res.get2();
+                            v = res.value();
+                            ver = res.version();
                         }
                     }
                     else {

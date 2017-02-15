@@ -17,7 +17,17 @@
 
 package org.apache.ignite.internal.processors.query.h2.opt;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -42,8 +52,9 @@ import org.apache.ignite.internal.processors.query.h2.twostep.msg.GridH2RowRange
 import org.apache.ignite.internal.processors.query.h2.twostep.msg.GridH2RowRangeBounds;
 import org.apache.ignite.internal.processors.query.h2.twostep.msg.GridH2ValueMessage;
 import org.apache.ignite.internal.processors.query.h2.twostep.msg.GridH2ValueMessageFactory;
-import org.apache.ignite.internal.util.*;
-import org.apache.ignite.internal.util.lang.*;
+import org.apache.ignite.internal.util.GridSpinBusyLock;
+import org.apache.ignite.internal.util.IgniteTree;
+import org.apache.ignite.internal.util.lang.GridCursor;
 import org.apache.ignite.internal.util.typedef.CIX2;
 import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.internal.CU;
@@ -629,7 +640,7 @@ public abstract class GridH2IndexBase extends BaseIndex {
             node = cctx.discovery().node(nodeId);
         }
         else // Get primary node for current topology version.
-            node = cctx.affinity().primary(affKeyObj, qctx.topologyVersion());
+            node = cctx.affinity().primaryByKey(affKeyObj, qctx.topologyVersion());
 
         if (node == null) // Node was not found, probably topology changed and we need to retry the whole query.
             throw new GridH2RetryException("Failed to find node.");
@@ -1245,7 +1256,7 @@ public abstract class GridH2IndexBase extends BaseIndex {
                 try {
                     res = respQueue.poll(500, TimeUnit.MILLISECONDS);
                 }
-                catch (InterruptedException e) {
+                catch (InterruptedException ignored) {
                     throw new GridH2RetryException("Interrupted.");
                 }
 

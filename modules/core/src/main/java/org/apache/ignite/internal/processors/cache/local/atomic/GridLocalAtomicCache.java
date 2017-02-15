@@ -45,6 +45,7 @@ import org.apache.ignite.internal.processors.cache.CacheObject;
 import org.apache.ignite.internal.processors.cache.CacheOperationContext;
 import org.apache.ignite.internal.processors.cache.CachePartialUpdateCheckedException;
 import org.apache.ignite.internal.processors.cache.CacheStorePartialUpdateException;
+import org.apache.ignite.internal.processors.cache.EntryGetResult;
 import org.apache.ignite.internal.processors.cache.GridCacheContext;
 import org.apache.ignite.internal.processors.cache.GridCacheEntryEx;
 import org.apache.ignite.internal.processors.cache.GridCacheEntryRemovedException;
@@ -410,7 +411,7 @@ public class GridLocalAtomicCache<K, V> extends GridLocalCache<K, V> {
                         GridCacheVersion ver;
 
                         if (needVer) {
-                            T2<CacheObject, GridCacheVersion> res = entry.innerGetVersioned(
+                            EntryGetResult res = entry.innerGetVersioned(
                                 null,
                                 null,
                                 /**update-metrics*/false,
@@ -419,11 +420,12 @@ public class GridLocalAtomicCache<K, V> extends GridLocalCache<K, V> {
                                 null,
                                 taskName,
                                 expiry,
-                                !deserializeBinary);
+                                !deserializeBinary,
+                                null);
 
                             if (res != null) {
-                                v = res.get1();
-                                ver = res.get2();
+                                v = res.value();
+                                ver = res.version();
 
                                 ctx.addResult(
                                     vals,
@@ -491,6 +493,7 @@ public class GridLocalAtomicCache<K, V> extends GridLocalCache<K, V> {
 
         return getAllAsync(
             keys,
+            null,
             opCtx == null || !opCtx.skipStore(),
             false,
             subjId,
@@ -1419,6 +1422,7 @@ public class GridLocalAtomicCache<K, V> extends GridLocalCache<K, V> {
         boolean retval,
         TransactionIsolation isolation,
         boolean invalidate,
+        long createTtl,
         long accessTtl) {
         return new GridFinishedFuture<>(new UnsupportedOperationException("Locks are not supported for " +
             "CacheAtomicityMode.ATOMIC mode (use CacheAtomicityMode.TRANSACTIONAL instead)"));

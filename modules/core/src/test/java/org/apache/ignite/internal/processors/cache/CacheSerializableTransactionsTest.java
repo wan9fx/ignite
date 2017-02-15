@@ -966,7 +966,7 @@ public class CacheSerializableTransactionsTest extends GridCommonAbstractTest {
 
                             fail();
                         }
-                        catch (TransactionOptimisticException e) {
+                        catch (TransactionOptimisticException ignored) {
                             // Expected exception.
                         }
 
@@ -2918,7 +2918,7 @@ public class CacheSerializableTransactionsTest extends GridCommonAbstractTest {
 
                                     tx.commit();
                                 }
-                                catch (TransactionOptimisticException e) {
+                                catch (TransactionOptimisticException ignored) {
                                     continue;
                                 }
 
@@ -2979,7 +2979,7 @@ public class CacheSerializableTransactionsTest extends GridCommonAbstractTest {
 
                                     tx.commit();
                                 }
-                                catch (TransactionOptimisticException e) {
+                                catch (TransactionOptimisticException ignored) {
                                     continue;
                                 }
 

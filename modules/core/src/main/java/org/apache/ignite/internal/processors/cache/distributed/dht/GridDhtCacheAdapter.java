@@ -35,8 +35,8 @@ import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.IgniteException;
 import org.apache.ignite.cluster.ClusterNode;
 import org.apache.ignite.internal.IgniteInternalFuture;
-import org.apache.ignite.internal.cluster.ClusterTopologyCheckedException;
 import org.apache.ignite.internal.NodeStoppingException;
+import org.apache.ignite.internal.cluster.ClusterTopologyCheckedException;
 import org.apache.ignite.internal.processors.affinity.AffinityTopologyVersion;
 import org.apache.ignite.internal.processors.cache.CacheObject;
 import org.apache.ignite.internal.processors.cache.CacheOperationContext;
@@ -53,6 +53,7 @@ import org.apache.ignite.internal.processors.cache.GridCacheMapEntryFactory;
 import org.apache.ignite.internal.processors.cache.GridCachePreloader;
 import org.apache.ignite.internal.processors.cache.IgniteCacheExpiryPolicy;
 import org.apache.ignite.internal.processors.cache.KeyCacheObject;
+import org.apache.ignite.internal.processors.cache.ReaderArguments;
 import org.apache.ignite.internal.processors.cache.distributed.GridCacheTtlUpdateRequest;
 import org.apache.ignite.internal.processors.cache.distributed.GridDistributedCacheAdapter;
 import org.apache.ignite.internal.processors.cache.distributed.GridDistributedCacheEntry;
@@ -620,6 +621,7 @@ public abstract class GridDhtCacheAdapter<K, V> extends GridDistributedCacheAdap
         CacheOperationContext opCtx = ctx.operationContextPerCall();
 
         return getAllAsync(keys,
+            null,
             opCtx == null || !opCtx.skipStore(),
             /*don't check local tx. */false,
             subjId,
@@ -635,6 +637,7 @@ public abstract class GridDhtCacheAdapter<K, V> extends GridDistributedCacheAdap
 
     /**
      * @param keys Keys to get
+     * @param readerArgs Reader will be added if not null.
      * @param readThrough Read through flag.
      * @param subjId Subject ID.
      * @param taskName Task name.
@@ -645,6 +648,7 @@ public abstract class GridDhtCacheAdapter<K, V> extends GridDistributedCacheAdap
      */
     IgniteInternalFuture<Map<KeyCacheObject, T2<CacheObject, GridCacheVersion>>> getDhtAllAsync(
         Collection<KeyCacheObject> keys,
+        @Nullable final ReaderArguments readerArgs,
         boolean readThrough,
         @Nullable UUID subjId,
         String taskName,
@@ -654,6 +658,7 @@ public abstract class GridDhtCacheAdapter<K, V> extends GridDistributedCacheAdap
         boolean recovery
     ) {
         return getAllAsync0(keys,
+            readerArgs,
             readThrough,
             /*don't check local tx. */false,
             subjId,
@@ -695,7 +700,6 @@ public abstract class GridDhtCacheAdapter<K, V> extends GridDistributedCacheAdap
             reader,
             keys,
             readThrough,
-            /*tx*/null,
             topVer,
             subjId,
             taskNameHash,
@@ -741,7 +745,6 @@ public abstract class GridDhtCacheAdapter<K, V> extends GridDistributedCacheAdap
             key,
             addRdr,
             readThrough,
-            /*tx*/null,
             topVer,
             subjId,
             taskNameHash,
@@ -761,7 +764,7 @@ public abstract class GridDhtCacheAdapter<K, V> extends GridDistributedCacheAdap
     protected void processNearSingleGetRequest(final UUID nodeId, final GridNearSingleGetRequest req) {
         assert ctx.affinityNode();
 
-        final CacheExpiryPolicy expiryPlc = CacheExpiryPolicy.forAccess(req.accessTtl());
+        final CacheExpiryPolicy expiryPlc = CacheExpiryPolicy.fromRemote(req.createTtl(), req.accessTtl());
 
         IgniteInternalFuture<GridCacheEntryInfo> fut =
             getDhtSingleAsync(
@@ -825,7 +828,7 @@ public abstract class GridDhtCacheAdapter<K, V> extends GridDistributedCacheAdap
                             req.addDeploymentInfo());
                     }
                 }
-                catch (NodeStoppingException ignore) {
+                catch (NodeStoppingException ignored) {
                     return;
                 }
                 catch (IgniteCheckedException e) {
@@ -862,9 +865,7 @@ public abstract class GridDhtCacheAdapter<K, V> extends GridDistributedCacheAdap
         assert ctx.affinityNode();
         assert !req.reload() : req;
 
-        long ttl = req.accessTtl();
-
-        final CacheExpiryPolicy expiryPlc = CacheExpiryPolicy.forAccess(ttl);
+        final CacheExpiryPolicy expiryPlc = CacheExpiryPolicy.fromRemote(req.createTtl(), req.accessTtl());
 
         IgniteInternalFuture<Collection<GridCacheEntryInfo>> fut =
             getDhtAsync(nodeId,
@@ -894,7 +895,7 @@ public abstract class GridDhtCacheAdapter<K, V> extends GridDistributedCacheAdap
 
                     res.entries(entries);
                 }
-                catch (NodeStoppingException ignore) {
+                catch (NodeStoppingException ignored) {
                     return;
                 }
                 catch (IgniteCheckedException e) {
@@ -938,7 +939,7 @@ public abstract class GridDhtCacheAdapter<K, V> extends GridDistributedCacheAdap
                     AffinityTopologyVersion topVer = ctx.shared().exchange().readyAffinityVersion();
 
                     for (Map.Entry<KeyCacheObject, GridCacheVersion> e : entries.entrySet()) {
-                        List<ClusterNode> nodes = ctx.affinity().nodes(e.getKey(), topVer);
+                        List<ClusterNode> nodes = ctx.affinity().nodesByKey(e.getKey(), topVer);
 
                         for (int i = 0; i < nodes.size(); i++) {
                             ClusterNode node = nodes.get(i);
@@ -1182,14 +1183,8 @@ public abstract class GridDhtCacheAdapter<K, V> extends GridDistributedCacheAdap
         GridDhtLocalPartition part = topology().localPartition(entry.partition(), AffinityTopologyVersion.NONE,
             false);
 
-        if (part != null) {
-            try {
-                part.onDeferredDelete(entry.key(), ver);
-            }
-            catch (IgniteCheckedException e) {
-                U.error(log, "Failed to enqueue deleted entry [key=" + entry.key() + ", ver=" + ver + ']', e);
-            }
-        }
+        if (part != null)
+            part.onDeferredDelete(entry.key(), ver);
     }
 
     /**
@@ -1213,7 +1208,7 @@ public abstract class GridDhtCacheAdapter<K, V> extends GridDistributedCacheAdap
 
             return !aff1.equals(aff2);
         }
-        catch (IllegalStateException ignore) {
+        catch (IllegalStateException ignored) {
             return true;
         }
     }

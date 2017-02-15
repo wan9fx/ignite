@@ -66,6 +66,7 @@ import org.apache.ignite.internal.util.typedef.internal.U;
 import org.apache.ignite.lang.IgniteFuture;
 import org.apache.ignite.lang.IgniteRunnable;
 import org.apache.ignite.resources.IgniteInstanceResource;
+import org.apache.ignite.spi.discovery.DiscoveryDataBag;
 import org.jetbrains.annotations.Nullable;
 
 import static org.apache.ignite.events.EventType.EVT_NODE_FAILED;
@@ -213,14 +214,23 @@ public class GridClusterStateProcessor extends GridProcessorAdapter {
     }
 
     /** {@inheritDoc} */
-    @Nullable @Override public Serializable collectDiscoveryData(UUID nodeId) {
-        return globalState;
+    @Override public void collectJoiningNodeData(DiscoveryDataBag dataBag) {
+        dataBag.addJoiningNodeData(DiscoveryDataExchangeType.STATE_PROC.ordinal(), globalState);
     }
 
     /** {@inheritDoc} */
-    @Override public void onDiscoveryDataReceived(UUID joiningNodeId, UUID rmtNodeId, Serializable data) {
-        if (ctx.localNodeId().equals(joiningNodeId))
-            globalState = (ClusterState)data;
+    @Override public void collectGridNodeData(DiscoveryDataBag dataBag) {
+        dataBag.addGridCommonData(DiscoveryDataExchangeType.STATE_PROC.ordinal(), globalState);
+    }
+
+    /** {@inheritDoc} */
+    @Override public void onGridDataReceived(DiscoveryDataBag.GridDiscoveryData data) {
+        globalState = (ClusterState)data.commonData();
+    }
+
+    /** {@inheritDoc} */
+    @Override public void onJoiningNodeDataReceived(DiscoveryDataBag.JoiningNodeDiscoveryData data) {
+        // No-op.
     }
 
     /**
@@ -528,8 +538,6 @@ public class GridClusterStateProcessor extends GridProcessorAdapter {
                 Exception e = null;
 
                 try {
-                    ctx.marshallerContext().onMarshallerCacheStarted(ctx);
-
                     if (!ctx.config().isDaemon())
                         ctx.cacheObjects().onUtilityCacheStarted();
 

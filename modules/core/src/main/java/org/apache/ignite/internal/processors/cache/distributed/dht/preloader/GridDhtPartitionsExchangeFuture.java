@@ -126,6 +126,10 @@ public class GridDhtPartitionsExchangeFuture extends GridFutureAdapter<AffinityT
 
     /** */
     @GridToStringExclude
+    private int pendingSingleUpdates;
+
+    /** */
+    @GridToStringExclude
     private List<ClusterNode> srvNodes;
 
     /** */
@@ -1068,7 +1072,7 @@ public class GridDhtPartitionsExchangeFuture extends GridFutureAdapter<AffinityT
         try {
             cctx.io().send(node, m, SYSTEM_POOL);
         }
-        catch (ClusterTopologyCheckedException ignore) {
+        catch (ClusterTopologyCheckedException ignored) {
             if (log.isDebugEnabled())
                 log.debug("Node left during partition exchange [nodeId=" + node.id() + ", exchId=" + exchId + ']');
         }
@@ -1396,13 +1400,16 @@ public class GridDhtPartitionsExchangeFuture extends GridFutureAdapter<AffinityT
      */
     private void processMessage(ClusterNode node, GridDhtPartitionsSingleMessage msg) {
         boolean allReceived = false;
+        boolean updateSingleMap = false;
 
         synchronized (mux) {
             assert crd != null;
 
             if (crd.isLocal()) {
                 if (remaining.remove(node.id())) {
-                    updatePartitionSingleMap(node, msg);
+                    updateSingleMap = true;
+
+                    pendingSingleUpdates++;
 
                     if (exchangeOnChangeGlobalState && msg.getException() != null)
                         changeGlobalStateExceptions.put(node.id(), msg.getException());
@@ -1414,8 +1421,42 @@ public class GridDhtPartitionsExchangeFuture extends GridFutureAdapter<AffinityT
                 singleMsgs.put(node, msg);
         }
 
-        if (allReceived)
+        if (updateSingleMap) {
+            try {
+                updatePartitionSingleMap(node, msg);
+            }
+            finally {
+                synchronized (mux) {
+                    assert pendingSingleUpdates > 0;
+
+                    pendingSingleUpdates--;
+
+                    if (pendingSingleUpdates == 0)
+                        mux.notifyAll();
+                }
+            }
+        }
+
+        if (allReceived) {
+            awaitSingleMapUpdates();
+
             onAllReceived();
+        }
+    }
+
+    /**
+     *
+     */
+    private void awaitSingleMapUpdates() {
+        synchronized (mux) {
+            try {
+                while (pendingSingleUpdates > 0)
+                    U.wait(mux);
+            }
+            catch (IgniteInterruptedCheckedException e) {
+                U.warn(log, "Failed to wait for partition map updates, thread was interrupted: " + e);
+            }
+        }
     }
 
     /**
@@ -1941,6 +1982,8 @@ public class GridDhtPartitionsExchangeFuture extends GridFutureAdapter<AffinityT
                                 changeGlobalStateExceptions.put(crd0.id(), changeGlobalStateE);
 
                             if (allReceived) {
+                                awaitSingleMapUpdates();
+
                                 onAllReceived();
 
                                 return;
@@ -1954,7 +1997,7 @@ public class GridDhtPartitionsExchangeFuture extends GridFutureAdapter<AffinityT
                                         // It is possible that some nodes finished exchange with previous coordinator.
                                         cctx.io().send(nodeId, req, SYSTEM_POOL);
                                     }
-                                    catch (ClusterTopologyCheckedException e) {
+                                    catch (ClusterTopologyCheckedException ignored) {
                                         if (log.isDebugEnabled())
                                             log.debug("Node left during partition exchange [nodeId=" + nodeId +
                                                 ", exchId=" + exchId + ']');
