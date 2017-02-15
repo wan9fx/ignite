@@ -991,7 +991,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                             case RETRY:
                                 checkInterrupted();
 
-                                continue; // The child page got splitted, need to reread our page.
+                                continue; // The child page got split, need to reread our page.
 
                             default:
                                 return res;
@@ -1409,8 +1409,6 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
     /** {@inheritDoc} */
     @Override public void invoke(L row, InvokeClosure<T> c) throws IgniteCheckedException {
-        assert c != null;
-
         checkDestroyed();
 
         Invoke x = new Invoke(row, c);
@@ -1419,7 +1417,9 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
             for (;;) {
                 x.init();
 
-                switch (invokeDown(x, x.rootId, 0L, 0L, x.rootLvl)) {
+                Result res = invokeDown(x, x.rootId, 0L, 0L, x.rootLvl);
+
+                switch (res) {
                     case RETRY:
                     case RETRY_ROOT:
                         checkInterrupted();
@@ -1427,8 +1427,19 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                         continue;
 
                     default:
-                        if (x.finishIfNeeded() != FALSE)
-                            return;
+                        if (!x.isFinished()) {
+                            res = x.tryFinish();
+
+                            if (res == RETRY || res == RETRY_ROOT) {
+                                checkInterrupted();
+
+                                continue;
+                            }
+
+                            assert x.isFinished(): res;
+                        }
+
+                        return;
                 }
             }
         }
@@ -1490,7 +1501,10 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
                         // Intentional fallthrough.
                     case GO_DOWN:
-                        res = invokeDown(x, x.pageId, x.backId, x.fwdId, lvl - 1);
+                        res = x.tryReplaceInner(page, pageId, fwdId, lvl);
+
+                        if (res != RETRY)
+                            res = invokeDown(x, x.pageId, x.backId, x.fwdId, lvl - 1);
 
                         if (res == RETRY) {
                             checkInterrupted();
@@ -1498,37 +1512,16 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                             continue;
                         }
 
-                        if (res != RETRY_ROOT) {
-                            switch (x.finishIfNeeded()) {
-                                case DONE:
-                                    return res;
-
-                                    // TODO
-                            }
-                        }
+                        if (res != RETRY_ROOT)
+                            res = x.onUp();
 
                         return res;
 
                     case NOT_FOUND:
-                        // We are at the bottom.
-//                        assert lvl == 0 : lvl;
-//
-//                        r.finish();
-
-                        return res;
+                        return x.onNotFound();
 
                     case FOUND:
-                        // We must be at the bottom here, just need to remove row from the current page.
-//                        assert lvl == 0 : lvl;
-//
-//                        res = r.removeFromLeaf(pageId, page, backId, fwdId);
-//
-//                        if (res == FOUND && r.tail == null) {
-//                            // Finish if we don't need to do any merges.
-//                            r.finish();
-//                        }
-
-                        return res;
+                        return x.onFound();
 
                     default:
                         return res;
@@ -1782,7 +1775,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
      * {@inheritDoc}
      */
     @Override public final T put(T row) throws IgniteCheckedException {
-        return put(row, true);
+        return doPut(row, true);
     }
 
     /**
@@ -1791,7 +1784,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
      * @return {@code True} if replaced existing row.
      */
     public boolean putx(T row) throws IgniteCheckedException {
-        Boolean res = (Boolean)put(row, false);
+        Boolean res = (Boolean)doPut(row, false);
 
         return res != null ? res : false;
     }
@@ -1802,7 +1795,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
      * @return Old row.
      * @throws IgniteCheckedException If failed.
      */
-    private T put(T row, boolean needOld) throws IgniteCheckedException {
+    private T doPut(T row, boolean needOld) throws IgniteCheckedException {
         checkDestroyed();
 
         Put p = new Put(row, needOld);
@@ -2264,6 +2257,13 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
         void fwdId(long fwdId) {
             this.fwdId = fwdId;
         }
+
+        /**
+         * @return {@code true} If the operation is finished.
+         */
+        boolean isFinished() {
+            throw new IllegalStateException();
+        }
     }
 
     /**
@@ -2425,10 +2425,8 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
             tail(null, 0L);
         }
 
-        /**
-         * @return {@code true} If finished.
-         */
-        private boolean isFinished() {
+        /** {@inheritDoc} */
+        @Override boolean isFinished() {
             return row == null;
         }
 
@@ -2669,6 +2667,8 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
         private Invoke(L row, final InvokeClosure<T> clo) {
             super(row);
 
+            assert clo != null;
+
             this.clo = clo;
         }
 
@@ -2790,12 +2790,8 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
             return op.canRelease(page, lvl);
         }
 
-        /**
-         * @return {@code true} If the operation was finished successfully before this call or right now.
-         */
-        private Bool finishIfNeeded() {
-            // TODO
-            return DONE;
+        private boolean is(Class<?> cls) {
+            return op != null && op.getClass() == cls;
         }
 
         /**
@@ -2804,13 +2800,13 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
          * @return {@code true} If it is a {@link Remove} and the page is in tail.
          */
         private boolean isTail(long pageId, int lvl) {
-            return op != null && op.getClass() == Remove.class && ((Remove)op).isTail(pageId, lvl);
+            return is(Remove.class) && ((Remove)op).isTail(pageId, lvl);
         }
 
         /**
          */
         private void levelExit() {
-            if (op != null && op.getClass() == Remove.class)
+            if (is(Remove.class))
                 ((Remove)op).page = null;
         }
 
@@ -2818,8 +2814,64 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
          * Release all the resources by the end of operation.
          */
         private void releaseAll() throws IgniteCheckedException {
-            if (op != null && op.getClass() == Remove.class)
+            if (is(Remove.class))
                 ((Remove)op).releaseAll();
+        }
+
+        private Result onUp() {
+            return null; // TODO
+        }
+
+        private Result onNotFound() {
+            return null; // TODO
+        }
+
+        private Result onFound() {
+            return null; // TODO
+        }
+
+        /**
+         * @return Result.
+         * @throws IgniteCheckedException If failed.
+         */
+        private Result tryFinish() throws IgniteCheckedException {
+            if (is(Put.class))
+                return RETRY;
+
+            Result res = ((Remove)op).finishTail();
+
+            if (res == NOT_FOUND)
+                res = RETRY;
+
+            assert res == FOUND || res == RETRY: res;
+
+            return res;
+        }
+
+        /** {@inheritDoc} */
+        @Override boolean isFinished() {
+            if (!closureInvoked)
+                return false;
+
+            if (op == null)
+                return true;
+
+            return op.isFinished();
+        }
+
+        /**
+         * @param page Page.
+         * @param pageId Page ID.
+         * @param fwdId Forward ID.
+         * @param lvl Level.
+         * @return Result.
+         * @throws IgniteCheckedException If failed.
+         */
+        Result tryReplaceInner(Page page, long pageId, long fwdId, int lvl) throws IgniteCheckedException {
+            if (op == null || op.getClass() != Put.class)
+                return NOT_FOUND;
+
+            return ((Put)op).tryReplaceInner(page, pageId, fwdId, lvl);
         }
     }
 
@@ -3592,10 +3644,8 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
             return true;
         }
 
-        /**
-         * @return {@code true} If finished.
-         */
-        private boolean isFinished() {
+        /** {@inheritDoc} */
+        @Override boolean isFinished() {
             return row == null;
         }
 
