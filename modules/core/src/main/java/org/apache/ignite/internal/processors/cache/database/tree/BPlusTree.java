@@ -1509,23 +1509,27 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                         if (res == RETRY_ROOT || x.isFinished())
                             return res;
 
-                        if (res == RETRY || x.isPut()) {
+                        if (res == RETRY) {
                             checkInterrupted();
 
                             continue;
                         }
 
-                        assert x.isRemove();
+                        // Put does insert on the same level.
+                        if (x.isPut())
+                            continue;
+
+                        assert x.isRemove(); // Guarded by isFinished.
 
                         res = x.finishOrLockTail(page, pageId, backId, fwdId, lvl);
 
                         return res;
 
                     case NOT_FOUND:
-                        return x.onNotFound();
+                        return x.onNotFound(page, pageId, fwdId, lvl);
 
                     case FOUND:
-                        return x.onFound();
+                        return x.onFound(page, pageId, backId, fwdId, lvl);
 
                     default:
                         return res;
@@ -1667,17 +1671,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                         return res;
 
                     case FOUND:
-                        // We must be at the bottom here, just need to remove row from the current page.
-                        assert lvl == 0 : lvl;
-
-                        res = r.removeFromLeaf(pageId, page, backId, fwdId);
-
-                        if (res == FOUND && r.tail == null) {
-                            // Finish if we don't need to do any merges.
-                            r.finish();
-                        }
-
-                        return res;
+                        return r.tryRemoveFromLeaf(page, pageId, backId, fwdId, lvl);
 
                     default:
                         return res;
@@ -2830,12 +2824,48 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                 ((Remove)op).releaseAll();
         }
 
-        private Result onNotFound() {
-            return null; // TODO
+        /**
+         * @param page Page.
+         * @param pageId Page ID.
+         * @param fwdId Forward ID.
+         * @param lvl Level.
+         * @return Result.
+         * @throws IgniteCheckedException If failed.
+         */
+        private Result onNotFound(Page page, long pageId, long fwdId, int lvl)
+            throws IgniteCheckedException {
+            if (op == null)
+                return NOT_FOUND;
+
+            if (isRemove()) {
+                assert lvl == 0;
+
+                ((Remove)op).finish();
+
+                return NOT_FOUND;
+            }
+
+            return ((Put)op).tryInsert(page, pageId, fwdId, lvl);
         }
 
-        private Result onFound() {
-            return null; // TODO
+        /**
+         * @param page Page.
+         * @param pageId Page ID.
+         * @param backId Back page ID.
+         * @param fwdId Forward ID.
+         * @param lvl Level.
+         * @return Result.
+         * @throws IgniteCheckedException If failed.
+         */
+        private Result onFound(Page page, long pageId, long backId, long fwdId, int lvl)
+            throws IgniteCheckedException {
+            if (op == null)
+                return FOUND;
+
+            if (isRemove())
+                return ((Remove)op).tryRemoveFromLeaf(page, pageId, backId, fwdId, lvl);
+
+            return  ((Put)op).tryReplace(page, pageId, fwdId, lvl);
         }
 
         /**
@@ -3824,14 +3854,14 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
          * @param rootLvl Actual root level.
          * @return {@code true} If tail level is correct.
          */
-        public boolean checkTailLevel(int rootLvl) {
+        private boolean checkTailLevel(int rootLvl) {
             return tail == null || tail.lvl < rootLvl;
         }
 
         /**
          * @throws IgniteCheckedException If failed.
          */
-        public void releaseAll() throws IgniteCheckedException {
+        private void releaseAll() throws IgniteCheckedException {
             releaseTail();
             reuseFreePages();
         }
@@ -3845,12 +3875,34 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
          * @return Result.
          * @throws IgniteCheckedException If failed.
          */
-        public Result finishOrLockTail(Page page, long pageId, long backId, long fwdId, int lvl)
+        private Result finishOrLockTail(Page page, long pageId, long backId, long fwdId, int lvl)
             throws IgniteCheckedException {
             Result res = finishTail();
 
             if (res == NOT_FOUND)
                 res = lockTail(pageId, page, backId, fwdId, lvl);
+
+            return res;
+        }
+
+        /**
+         * @param page Page.
+         * @param pageId Page ID.
+         * @param backId Back page ID.
+         * @param fwdId Forward ID.
+         * @param lvl Level.
+         * @return Result.
+         * @throws IgniteCheckedException If failed.
+         */
+        private Result tryRemoveFromLeaf(Page page, long pageId, long backId, long fwdId, int lvl)
+            throws IgniteCheckedException {
+            // We must be at the bottom here, just need to remove row from the current page.
+            assert lvl == 0 : lvl;
+
+            Result res = removeFromLeaf(pageId, page, backId, fwdId);
+
+            if (res == FOUND && tail == null) // Finish if we don't need to do any merges.
+                finish();
 
             return res;
         }
