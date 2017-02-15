@@ -2757,6 +2757,9 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
                     assert newRow != null;
 
+                    // Row key must be equal to the old one.
+                    assert !rowFound || compare(io, pageAddr, idx, newRow) == 0;
+
                     op = new Put(newRow, false);
 
                     break;
