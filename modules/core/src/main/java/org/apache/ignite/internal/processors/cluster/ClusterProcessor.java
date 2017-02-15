@@ -115,7 +115,6 @@ public class ClusterProcessor extends GridProcessorAdapter {
         dataBag.addNodeSpecificData(CLUSTER_PROC.ordinal(), getDiscoveryData());
     }
 
-
     /**
      * @return Discovery data.
      */

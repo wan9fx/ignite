@@ -85,9 +85,10 @@ public interface CachePluginProvider<C extends CachePluginConfiguration> {
      * Checks that remote caches has configuration compatible with the local.
      *
      * @param locCfg Local configuration.
+     * @param locPluginCcfg Local plugin configuration.
      * @param rmtCfg Remote configuration.
      * @param rmtNode Remote node.
      */
-    public void validateRemote(CacheConfiguration locCfg, CacheConfiguration rmtCfg, ClusterNode rmtNode)
+    public void validateRemote(CacheConfiguration locCfg, C locPluginCcfg, CacheConfiguration rmtCfg, ClusterNode rmtNode)
         throws IgniteCheckedException;
 }

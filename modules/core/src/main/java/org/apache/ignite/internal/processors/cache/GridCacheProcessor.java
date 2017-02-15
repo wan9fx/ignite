@@ -2085,7 +2085,9 @@ public class GridCacheProcessor extends GridProcessorAdapter {
      */
     private void collectDataOnGridNode(Collection<DynamicCacheChangeRequest> reqs) {
         for (DynamicCacheDescriptor desc : registeredCaches.values()) {
-            DynamicCacheChangeRequest req = new DynamicCacheChangeRequest(desc.cacheConfiguration().getName(), null);
+            DynamicCacheChangeRequest req = new DynamicCacheChangeRequest(null,
+                desc.cacheConfiguration().getName(),
+                null);
 
             req.startCacheConfiguration(desc.cacheConfiguration());
 
@@ -2099,7 +2101,9 @@ public class GridCacheProcessor extends GridProcessorAdapter {
         }
 
         for (DynamicCacheDescriptor desc : registeredTemplates.values()) {
-            DynamicCacheChangeRequest req = new DynamicCacheChangeRequest(desc.cacheConfiguration().getName(), null);
+            DynamicCacheChangeRequest req = new DynamicCacheChangeRequest(null,
+                desc.cacheConfiguration().getName(),
+                null);
 
             req.startCacheConfiguration(desc.cacheConfiguration());
 
@@ -2125,7 +2129,7 @@ public class GridCacheProcessor extends GridProcessorAdapter {
             if (desc == null)
                 continue;
 
-            DynamicCacheChangeRequest req = new DynamicCacheChangeRequest(cache.name(), null);
+            DynamicCacheChangeRequest req = new DynamicCacheChangeRequest(null, cache.name(), null);
 
             req.startCacheConfiguration(desc.cacheConfiguration());
 
@@ -2757,8 +2761,6 @@ public class GridCacheProcessor extends GridProcessorAdapter {
 
         if (CU.isUtilityCache(cacheName))
             req.cacheType(CacheType.UTILITY);
-        else if (CU.isMarshallerCache(cacheName))
-            req.cacheType(CacheType.MARSHALLER);
         else if (internalCaches.contains(cacheName))
             req.cacheType(CacheType.INTERNAL);
         else
