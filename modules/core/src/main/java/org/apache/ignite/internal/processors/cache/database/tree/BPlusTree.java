@@ -1560,7 +1560,9 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
             for (;;) {
                 r.init();
 
-                switch (removeDown(r, r.rootId, 0L, 0L, r.rootLvl)) {
+                Result res = removeDown(r, r.rootId, 0L, 0L, r.rootLvl);
+
+                switch (res) {
                     case RETRY:
                     case RETRY_ROOT:
                         checkInterrupted();
@@ -1569,7 +1571,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
                     default:
                         if (!r.isFinished()) {
-                            Result res = r.finishTail();
+                            res = r.finishTail();
 
                             // If not found, then the tree grew beyond our call stack -> retry from the actual root.
                             if (res == RETRY || res == NOT_FOUND) {
