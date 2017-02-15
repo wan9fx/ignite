@@ -74,7 +74,7 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
     protected final GridCacheContext cctx;
 
     /** Future version. */
-    protected final GridCacheVersion futVer;
+    protected final long futId;
 
     /** Completion callback. */
     @GridToStringExclude
@@ -114,7 +114,7 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
         GridNearAtomicUpdateResponse updateRes) {
         this.cctx = cctx;
 
-        futVer = cctx.versions().next(updateReq.topologyVersion());
+        futId = cctx.mvcc().atomicFutureId();
         this.updateReq = updateReq;
         this.completionCb = completionCb;
         this.updateRes = updateRes;
@@ -191,7 +191,7 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
                 if (updateReq == null) {
                     updateReq = createRequest(
                         node,
-                        futVer,
+                        futId,
                         writeVer,
                         syncMode,
                         topVer,
@@ -260,7 +260,7 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
 
                 updateReq = createRequest(
                     node,
-                    futVer,
+                    futId,
                     writeVer,
                     syncMode,
                     topVer,
@@ -297,12 +297,12 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
 
     /** {@inheritDoc} */
     @Override public final IgniteUuid futureId() {
-        return futVer.asGridUuid();
+        throw new UnsupportedOperationException();
     }
 
     /** {@inheritDoc} */
-    @Override public final GridCacheVersion version() {
-        return futVer;
+    @Override public final Long id() {
+        return futId;
     }
 
     /** {@inheritDoc} */
@@ -310,7 +310,7 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
         boolean res = registerResponse(nodeId);
 
         if (res && msgLog.isDebugEnabled()) {
-            msgLog.debug("DTH update fut, node left [futId=" + futVer + ", writeVer=" + writeVer +
+            msgLog.debug("DTH update fut, node left [futId=" + futId + ", writeVer=" + writeVer +
                 ", node=" + nodeId + ']');
         }
 
@@ -358,20 +358,20 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
                     cctx.io().send(req.nodeId(), req, cctx.ioPolicy());
 
                     if (msgLog.isDebugEnabled()) {
-                        msgLog.debug("DTH update fut, sent request [futId=" + futVer +
+                        msgLog.debug("DTH update fut, sent request [futId=" + futId +
                             ", writeVer=" + writeVer + ", node=" + req.nodeId() + ']');
                     }
                 }
                 catch (ClusterTopologyCheckedException ignored) {
                     if (msgLog.isDebugEnabled()) {
-                        msgLog.debug("DTH update fut, failed to send request, node left [futId=" + futVer +
+                        msgLog.debug("DTH update fut, failed to send request, node left [futId=" + futId +
                             ", writeVer=" + writeVer + ", node=" + req.nodeId() + ']');
                     }
 
                     registerResponse(req.nodeId());
                 }
                 catch (IgniteCheckedException ignored) {
-                    U.error(msgLog, "Failed to send request [futId=" + futVer +
+                    U.error(msgLog, "Failed to send request [futId=" + futId +
                         ", writeVer=" + writeVer + ", node=" + req.nodeId() + ']');
 
                     registerResponse(req.nodeId());
@@ -401,7 +401,7 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
 
     /**
      * @param node Node.
-     * @param futVer Future version.
+     * @param futId Future ID.
      * @param writeVer Update version.
      * @param syncMode Write synchronization mode.
      * @param topVer Topology version.
@@ -412,7 +412,7 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
      */
     protected abstract GridDhtAtomicAbstractUpdateRequest createRequest(
         ClusterNode node,
-        GridCacheVersion futVer,
+        long futId,
         GridCacheVersion writeVer,
         CacheWriteSynchronizationMode syncMode,
         @NotNull AffinityTopologyVersion topVer,
@@ -438,7 +438,7 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
     /** {@inheritDoc} */
     @Override public final boolean onDone(@Nullable Void res, @Nullable Throwable err) {
         if (super.onDone(res, err)) {
-            cctx.mvcc().removeAtomicFuture(version());
+            cctx.mvcc().removeAtomicFuture(futId);
 
             boolean suc = err == null;
 

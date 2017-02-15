@@ -467,15 +467,15 @@ public class GridCacheIoManager extends GridCacheSharedManagerAdapter {
      * @param cacheMsg Cache message.
      * @return Atomic future ID if applicable for message.
      */
-    @Nullable private GridCacheVersion atomicFututeId(GridCacheMessage cacheMsg) {
+    @Nullable private Long atomicFututeId(GridCacheMessage cacheMsg) {
         if (cacheMsg instanceof GridNearAtomicAbstractUpdateRequest)
-            return ((GridNearAtomicAbstractUpdateRequest)cacheMsg).futureVersion();
+            return ((GridNearAtomicAbstractUpdateRequest)cacheMsg).futureId();
         else if (cacheMsg instanceof GridNearAtomicUpdateResponse)
-            return ((GridNearAtomicUpdateResponse) cacheMsg).futureVersion();
+            return ((GridNearAtomicUpdateResponse) cacheMsg).futureId();
         else if (cacheMsg instanceof GridDhtAtomicAbstractUpdateRequest)
-            return ((GridDhtAtomicAbstractUpdateRequest)cacheMsg).futureVersion();
+            return ((GridDhtAtomicAbstractUpdateRequest)cacheMsg).futureId();
         else if (cacheMsg instanceof GridDhtAtomicUpdateResponse)
-            return ((GridDhtAtomicUpdateResponse) cacheMsg).futureVersion();
+            return ((GridDhtAtomicUpdateResponse) cacheMsg).futureId();
 
         return null;
     }
@@ -557,7 +557,7 @@ public class GridCacheIoManager extends GridCacheSharedManagerAdapter {
 
                 GridDhtAtomicUpdateResponse res = new GridDhtAtomicUpdateResponse(
                     ctx.cacheId(),
-                    req.futureVersion(),
+                    req.futureId(),
                     ctx.deploymentEnabled());
 
                 res.onError(req.classError());
@@ -573,7 +573,7 @@ public class GridCacheIoManager extends GridCacheSharedManagerAdapter {
                 GridNearAtomicUpdateResponse res = new GridNearAtomicUpdateResponse(
                     ctx.cacheId(),
                     nodeId,
-                    req.futureVersion(),
+                    req.futureId(),
                     ctx.deploymentEnabled());
 
                 res.error(req.classError());
@@ -751,7 +751,7 @@ public class GridCacheIoManager extends GridCacheSharedManagerAdapter {
                 GridNearAtomicUpdateResponse res = new GridNearAtomicUpdateResponse(
                     ctx.cacheId(),
                     nodeId,
-                    req.futureVersion(),
+                    req.futureId(),
                     ctx.deploymentEnabled());
 
                 res.error(req.classError());
@@ -767,7 +767,7 @@ public class GridCacheIoManager extends GridCacheSharedManagerAdapter {
                 GridNearAtomicUpdateResponse res = new GridNearAtomicUpdateResponse(
                     ctx.cacheId(),
                     nodeId,
-                    req.futureVersion(),
+                    req.futureId(),
                     ctx.deploymentEnabled());
 
                 res.error(req.classError());
@@ -783,7 +783,7 @@ public class GridCacheIoManager extends GridCacheSharedManagerAdapter {
                 GridNearAtomicUpdateResponse res = new GridNearAtomicUpdateResponse(
                     ctx.cacheId(),
                     nodeId,
-                    req.futureVersion(),
+                    req.futureId(),
                     ctx.deploymentEnabled());
 
                 res.error(req.classError());
@@ -798,7 +798,7 @@ public class GridCacheIoManager extends GridCacheSharedManagerAdapter {
 
                 GridDhtAtomicUpdateResponse res = new GridDhtAtomicUpdateResponse(
                     ctx.cacheId(),
-                    req.futureVersion(),
+                    req.futureId(),
                     ctx.deploymentEnabled());
 
                 res.onError(req.classError());

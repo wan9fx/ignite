@@ -113,9 +113,6 @@ public abstract class GridNearAtomicAbstractUpdateFuture extends GridFutureAdapt
     /** Current topology version. */
     protected AffinityTopologyVersion topVer = AffinityTopologyVersion.ZERO;
 
-    /** */
-    protected GridCacheVersion updVer;
-
     /** Topology version when got mapping error. */
     protected AffinityTopologyVersion mapErrTopVer;
 
@@ -126,7 +123,7 @@ public abstract class GridNearAtomicAbstractUpdateFuture extends GridFutureAdapt
     protected CachePartialUpdateCheckedException err;
 
     /** Future ID. */
-    protected GridCacheVersion futVer;
+    protected Long futId;
 
     /** Completion future for a particular topology version. */
     protected GridFutureAdapter<Void> topCompleteFut;
@@ -212,18 +209,18 @@ public abstract class GridNearAtomicAbstractUpdateFuture extends GridFutureAdapt
             // Cannot remap.
             remapCnt = 1;
 
-            GridCacheVersion futVer = addAtomicFuture(topVer);
+            Long futId = addAtomicFuture(topVer);
 
-            if (futVer != null)
-                map(topVer, futVer);
+            if (futId != null)
+                map(topVer, futId);
         }
     }
 
     /**
      * @param topVer Topology version.
-     * @param futVer Future version
+     * @param futId Future ID.
      */
-    protected abstract void map(AffinityTopologyVersion topVer, GridCacheVersion futVer);
+    protected abstract void map(AffinityTopologyVersion topVer, Long futId);
 
     /**
      * Maps future on ready topology.
@@ -272,7 +269,7 @@ public abstract class GridNearAtomicAbstractUpdateFuture extends GridFutureAdapt
                 cctx.io().send(req.nodeId(), req, cctx.ioPolicy());
 
                 if (msgLog.isDebugEnabled()) {
-                    msgLog.debug("Near update fut, sent request [futId=" + req.futureVersion() +
+                    msgLog.debug("Near update fut, sent request [futId=" + req.futureId() +
                         ", writeVer=" + req.updateVersion() +
                         ", node=" + req.nodeId() + ']');
                 }
@@ -282,7 +279,7 @@ public abstract class GridNearAtomicAbstractUpdateFuture extends GridFutureAdapt
             }
             catch (IgniteCheckedException e) {
                 if (msgLog.isDebugEnabled()) {
-                    msgLog.debug("Near update fut, failed to send request [futId=" + req.futureVersion() +
+                    msgLog.debug("Near update fut, failed to send request [futId=" + req.futureId() +
                         ", writeVer=" + req.updateVersion() +
                         ", node=" + req.nodeId() +
                         ", err=" + e + ']');
@@ -302,6 +299,8 @@ public abstract class GridNearAtomicAbstractUpdateFuture extends GridFutureAdapt
      */
     public abstract void onResult(UUID nodeId, GridNearAtomicUpdateResponse res, boolean nodeErr);
 
+    public abstract void onResult(UUID nodeId, GridNearAtomicDhtResponse res);
+
     /**
      * @param req Request.
      * @param e Error.
@@ -310,7 +309,7 @@ public abstract class GridNearAtomicAbstractUpdateFuture extends GridFutureAdapt
         synchronized (mux) {
             GridNearAtomicUpdateResponse res = new GridNearAtomicUpdateResponse(cctx.cacheId(),
                 req.nodeId(),
-                req.futureVersion(),
+                req.futureId(),
                 cctx.deploymentEnabled());
 
             res.addFailedKeys(req.keys(), e);
@@ -324,22 +323,22 @@ public abstract class GridNearAtomicAbstractUpdateFuture extends GridFutureAdapt
      * Should be invoked before topology lock released.
      *
      * @param topVer Topology version.
-     * @return Future version in case future added.
+     * @return Future ID in case future added.
      */
-    protected final GridCacheVersion addAtomicFuture(AffinityTopologyVersion topVer) {
-        GridCacheVersion futVer = cctx.versions().next(topVer);
+    protected final Long addAtomicFuture(AffinityTopologyVersion topVer) {
+        Long futId = cctx.mvcc().atomicFutureId();
 
         synchronized (mux) {
-            assert this.futVer == null : this;
+            assert this.futId == null : this;
             assert this.topVer == AffinityTopologyVersion.ZERO : this;
 
             this.topVer = topVer;
-            this.futVer = futVer;
+            this.futId = futId;
         }
 
-        if (storeFuture() && !cctx.mvcc().addAtomicFuture(futVer, this))
+        if (storeFuture() && !cctx.mvcc().addAtomicFuture(futId, this))
             return null;
 
-        return futVer;
+        return futId;
     }
 }

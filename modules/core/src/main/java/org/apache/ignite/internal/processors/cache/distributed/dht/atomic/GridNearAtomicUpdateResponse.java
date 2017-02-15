@@ -59,8 +59,8 @@ public class GridNearAtomicUpdateResponse extends GridCacheMessage implements Gr
     @GridDirectTransient
     private UUID nodeId;
 
-    /** Future version. */
-    private GridCacheVersion futVer;
+    /** Future ID. */
+    private long futId;
 
     /** Update error. */
     @GridDirectTransient
@@ -115,15 +115,13 @@ public class GridNearAtomicUpdateResponse extends GridCacheMessage implements Gr
     /**
      * @param cacheId Cache ID.
      * @param nodeId Node ID this reply should be sent to.
-     * @param futVer Future version.
+     * @param futId Future ID.
      * @param addDepInfo Deployment info flag.
      */
-    public GridNearAtomicUpdateResponse(int cacheId, UUID nodeId, GridCacheVersion futVer, boolean addDepInfo) {
-        assert futVer != null;
-
+    public GridNearAtomicUpdateResponse(int cacheId, UUID nodeId, long futId, boolean addDepInfo) {
         this.cacheId = cacheId;
         this.nodeId = nodeId;
-        this.futVer = futVer;
+        this.futId = futId;
         this.addDepInfo = addDepInfo;
     }
 
@@ -147,10 +145,10 @@ public class GridNearAtomicUpdateResponse extends GridCacheMessage implements Gr
     }
 
     /**
-     * @return Future version.
+     * @return Future ID.
      */
-    public GridCacheVersion futureVersion() {
-        return futVer;
+    public long futureId() {
+        return futId;
     }
 
     /**
@@ -468,7 +466,7 @@ public class GridNearAtomicUpdateResponse extends GridCacheMessage implements Gr
                 writer.incrementState();
 
             case 5:
-                if (!writer.writeMessage("futVer", futVer))
+                if (!writer.writeLong("futId", futId))
                     return false;
 
                 writer.incrementState();
@@ -554,7 +552,7 @@ public class GridNearAtomicUpdateResponse extends GridCacheMessage implements Gr
                 reader.incrementState();
 
             case 5:
-                futVer = reader.readMessage("futVer");
+                futId = reader.readLong("futId");
 
                 if (!reader.isLastRead())
                     return false;

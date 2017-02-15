@@ -33,7 +33,7 @@ import org.jsr166.ConcurrentLinkedDeque8;
 /**
  *
  */
-public abstract class GridDeferredAckMessageSender {
+public abstract class GridDeferredAckMessageSender<T> {
     /** Deferred message buffers. */
     private ConcurrentMap<UUID, DeferredAckMessageBuffer> deferredAckMsgBuffers = new ConcurrentHashMap8<>();
 
@@ -66,7 +66,7 @@ public abstract class GridDeferredAckMessageSender {
     /**
      *
      */
-    public abstract void finish(UUID nodeId, ConcurrentLinkedDeque8<GridCacheVersion> vers);
+    public abstract void finish(UUID nodeId, ConcurrentLinkedDeque8<T> vers);
 
     /**
      *
@@ -80,7 +80,7 @@ public abstract class GridDeferredAckMessageSender {
      * @param nodeId Node ID to send message to.
      * @param ver Version to ack.
      */
-    public void sendDeferredAckMessage(UUID nodeId, GridCacheVersion ver) {
+    public void sendDeferredAckMessage(UUID nodeId, T ver) {
         while (true) {
             DeferredAckMessageBuffer buf = deferredAckMsgBuffers.get(nodeId);
 
@@ -116,7 +116,7 @@ public abstract class GridDeferredAckMessageSender {
         private AtomicBoolean guard = new AtomicBoolean(false);
 
         /** Versions. */
-        private ConcurrentLinkedDeque8<GridCacheVersion> vers = new ConcurrentLinkedDeque8<>();
+        private ConcurrentLinkedDeque8<T> vers = new ConcurrentLinkedDeque8<>();
 
         /** Node ID. */
         private final UUID nodeId;
@@ -172,7 +172,7 @@ public abstract class GridDeferredAckMessageSender {
          * @param ver Version to send.
          * @return {@code True} if request was handled, {@code false} if this buffer is filled and cannot be used.
          */
-        public boolean add(GridCacheVersion ver) {
+        public boolean add(T ver) {
             readLock().lock();
 
             boolean snd = false;

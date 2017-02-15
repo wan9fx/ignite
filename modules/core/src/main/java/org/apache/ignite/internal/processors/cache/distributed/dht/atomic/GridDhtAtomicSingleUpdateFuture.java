@@ -98,7 +98,7 @@ class GridDhtAtomicSingleUpdateFuture extends GridDhtAtomicAbstractUpdateFuture 
     /** {@inheritDoc} */
     @Override protected GridDhtAtomicAbstractUpdateRequest createRequest(
         ClusterNode node,
-        GridCacheVersion futVer,
+        long futId,
         GridCacheVersion writeVer,
         CacheWriteSynchronizationMode syncMode,
         @NotNull AffinityTopologyVersion topVer,
@@ -110,7 +110,7 @@ class GridDhtAtomicSingleUpdateFuture extends GridDhtAtomicAbstractUpdateFuture 
             return new GridDhtAtomicSingleUpdateRequest(
                 cctx.cacheId(),
                 node.id(),
-                futVer,
+                futId,
                 writeVer,
                 syncMode,
                 topVer,
@@ -124,7 +124,7 @@ class GridDhtAtomicSingleUpdateFuture extends GridDhtAtomicAbstractUpdateFuture 
             return new GridDhtAtomicUpdateRequest(
                 cctx.cacheId(),
                 node.id(),
-                futVer,
+                futId,
                 writeVer,
                 syncMode,
                 topVer,

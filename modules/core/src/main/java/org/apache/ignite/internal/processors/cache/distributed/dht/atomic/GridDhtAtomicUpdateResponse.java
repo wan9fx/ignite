@@ -31,7 +31,6 @@ import org.apache.ignite.internal.processors.cache.GridCacheDeployable;
 import org.apache.ignite.internal.processors.cache.GridCacheMessage;
 import org.apache.ignite.internal.processors.cache.GridCacheSharedContext;
 import org.apache.ignite.internal.processors.cache.KeyCacheObject;
-import org.apache.ignite.internal.processors.cache.version.GridCacheVersion;
 import org.apache.ignite.internal.util.tostring.GridToStringInclude;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.internal.util.typedef.internal.U;
@@ -50,7 +49,7 @@ public class GridDhtAtomicUpdateResponse extends GridCacheMessage implements Gri
     public static final int CACHE_MSG_IDX = nextIndexId();
 
     /** Future version. */
-    private GridCacheVersion futVer;
+    private long futId;
 
     /** Failed keys. */
     @GridToStringInclude
@@ -78,12 +77,12 @@ public class GridDhtAtomicUpdateResponse extends GridCacheMessage implements Gri
 
     /**
      * @param cacheId Cache ID.
-     * @param futVer Future version.
+     * @param futId Future ID.
      * @param addDepInfo Deployment info.
      */
-    public GridDhtAtomicUpdateResponse(int cacheId, GridCacheVersion futVer, boolean addDepInfo) {
+    public GridDhtAtomicUpdateResponse(int cacheId, long futId, boolean addDepInfo) {
         this.cacheId = cacheId;
-        this.futVer = futVer;
+        this.futId = futId;
         this.addDepInfo = addDepInfo;
     }
 
@@ -95,8 +94,8 @@ public class GridDhtAtomicUpdateResponse extends GridCacheMessage implements Gri
     /**
      * @return Future version.
      */
-    public GridCacheVersion futureVersion() {
-        return futVer;
+    public long futureId() {
+        return futId;
     }
 
     /**
@@ -223,7 +222,7 @@ public class GridDhtAtomicUpdateResponse extends GridCacheMessage implements Gri
                 writer.incrementState();
 
             case 5:
-                if (!writer.writeMessage("futVer", futVer))
+                if (!writer.writeLong("futId", futId))
                     return false;
 
                 writer.incrementState();
@@ -267,7 +266,7 @@ public class GridDhtAtomicUpdateResponse extends GridCacheMessage implements Gri
                 reader.incrementState();
 
             case 5:
-                futVer = reader.readMessage("futVer");
+                futId = reader.readLong("futId");
 
                 if (!reader.isLastRead())
                     return false;

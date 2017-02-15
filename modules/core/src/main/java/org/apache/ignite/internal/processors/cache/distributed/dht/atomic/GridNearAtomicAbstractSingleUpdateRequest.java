@@ -70,7 +70,7 @@ public abstract class GridNearAtomicAbstractSingleUpdateRequest extends GridNear
     protected UUID nodeId;
 
     /** Future version. */
-    protected GridCacheVersion futVer;
+    protected long futId;
 
     /** Update version. Set to non-null if fastMap is {@code true}. */
     private GridCacheVersion updateVer;
@@ -109,7 +109,7 @@ public abstract class GridNearAtomicAbstractSingleUpdateRequest extends GridNear
      *
      * @param cacheId Cache ID.
      * @param nodeId Node ID.
-     * @param futVer Future version.
+     * @param futId Future ID.
      * @param fastMap Fast map scheme flag.
      * @param updateVer Update version set if fast map is performed.
      * @param topVer Topology version.
@@ -127,7 +127,7 @@ public abstract class GridNearAtomicAbstractSingleUpdateRequest extends GridNear
     protected GridNearAtomicAbstractSingleUpdateRequest(
         int cacheId,
         UUID nodeId,
-        GridCacheVersion futVer,
+        long futId,
         boolean fastMap,
         @Nullable GridCacheVersion updateVer,
         @NotNull AffinityTopologyVersion topVer,
@@ -142,11 +142,9 @@ public abstract class GridNearAtomicAbstractSingleUpdateRequest extends GridNear
         boolean clientReq,
         boolean addDepInfo
     ) {
-        assert futVer != null;
-
         this.cacheId = cacheId;
         this.nodeId = nodeId;
-        this.futVer = futVer;
+        this.futId = futId;
         this.updateVer = updateVer;
         this.topVer = topVer;
         this.syncMode = syncMode;
@@ -199,8 +197,8 @@ public abstract class GridNearAtomicAbstractSingleUpdateRequest extends GridNear
     /**
      * @return Future version.
      */
-    @Override public GridCacheVersion futureVersion() {
-        return futVer;
+    @Override public long futureId() {
+        return futId;
     }
 
     /**
@@ -421,7 +419,7 @@ public abstract class GridNearAtomicAbstractSingleUpdateRequest extends GridNear
                 writer.incrementState();
 
             case 4:
-                if (!writer.writeMessage("futVer", futVer))
+                if (!writer.writeLong("futId", futId))
                     return false;
 
                 writer.incrementState();
@@ -487,7 +485,7 @@ public abstract class GridNearAtomicAbstractSingleUpdateRequest extends GridNear
                 reader.incrementState();
 
             case 4:
-                futVer = reader.readMessage("futVer");
+                futId = reader.readLong("futId");
 
                 if (!reader.isLastRead())
                     return false;

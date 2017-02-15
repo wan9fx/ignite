@@ -26,9 +26,9 @@ import org.apache.ignite.internal.processors.cache.version.GridCacheVersion;
  */
 public interface GridCacheAtomicFuture<R> extends GridCacheFuture<R> {
     /**
-     * @return Future version.
+     * @return Future ID.
      */
-    public GridCacheVersion version();
+    public Long id();
 
     /**
      * Gets future that will be completed when it is safe when update is finished on the given version of topology.

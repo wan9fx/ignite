@@ -43,7 +43,7 @@ public class GridDhtAtomicDeferredUpdateResponse extends GridCacheMessage implem
 
     /** ACK future versions. */
     @GridDirectCollection(GridCacheVersion.class)
-    private Collection<GridCacheVersion> futVers;
+    private Collection<Long> futIds;
 
     /** {@inheritDoc} */
     @Override public int lookupIndex() {
@@ -61,14 +61,14 @@ public class GridDhtAtomicDeferredUpdateResponse extends GridCacheMessage implem
      * Constructor.
      *
      * @param cacheId Cache ID.
-     * @param futVers Future versions.
+     * @param futIds Future IDs.
      * @param addDepInfo Deployment info.
      */
-    public GridDhtAtomicDeferredUpdateResponse(int cacheId, Collection<GridCacheVersion> futVers, boolean addDepInfo) {
-        assert !F.isEmpty(futVers);
+    public GridDhtAtomicDeferredUpdateResponse(int cacheId, Collection<Long> futIds, boolean addDepInfo) {
+        assert !F.isEmpty(futIds);
 
         this.cacheId = cacheId;
-        this.futVers = futVers;
+        this.futIds = futIds;
         this.addDepInfo = addDepInfo;
     }
 
@@ -78,10 +78,10 @@ public class GridDhtAtomicDeferredUpdateResponse extends GridCacheMessage implem
     }
 
     /**
-     * @return List of ACKed future versions.
+     * @return List of ACKed future ids.
      */
-    public Collection<GridCacheVersion> futureVersions() {
-        return futVers;
+    public Collection<Long> futureIds() {
+        return futIds;
     }
 
     /** {@inheritDoc} */
@@ -105,7 +105,7 @@ public class GridDhtAtomicDeferredUpdateResponse extends GridCacheMessage implem
 
         switch (writer.state()) {
             case 3:
-                if (!writer.writeCollection("futVers", futVers, MessageCollectionItemType.MSG))
+                if (!writer.writeCollection("futIds", futIds, MessageCollectionItemType.MSG))
                     return false;
 
                 writer.incrementState();
@@ -127,7 +127,7 @@ public class GridDhtAtomicDeferredUpdateResponse extends GridCacheMessage implem
 
         switch (reader.state()) {
             case 3:
-                futVers = reader.readCollection("futVers", MessageCollectionItemType.MSG);
+                futIds = reader.readCollection("futIds", MessageCollectionItemType.MSG);
 
                 if (!reader.isLastRead())
                     return false;
