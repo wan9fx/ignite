@@ -350,10 +350,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
 
             // Detach the old row if we are on a leaf page.
             if (lvl == 0) {
-                assert p.oldRow == null;
-
-                // Get old row in leaf page to reduce contention at upper level.
-                p.oldRow = p.needOld ? getRow(io, pageAddr, idx) : (T)Boolean.TRUE;
+                assert p.oldRow == null; // The old row must be set only once.
 
                 // Inner replace state must be consistent by the end of the operation.
                 assert p.needReplaceInner == FALSE || p.needReplaceInner == DONE : p.needReplaceInner;
@@ -361,15 +358,18 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                 // Need to replace inner key if now we are replacing the rightmost row and have a forward page.
                 if (canGetRowFromInner && idx + 1 == cnt && p.fwdId != 0L && p.needReplaceInner == FALSE) {
                     // Can happen only for invoke, otherwise inner key must be replaced on the way down.
-                    assert p.invoke;
+                    assert p.invoke != null;
 
                     // We need to restart the operation from root to perform inner replace.
                     // On the second pass we will not get here (will avoid infinite loop) because
                     // needReplaceInner will be DONE or our key will not be the rightmost anymore.
                     return RETRY_ROOT;
                 }
-                else
-                    p.finish();
+
+                // Get old row in leaf page to reduce contention at upper level.
+                p.oldRow = p.needOld ? getRow(io, pageAddr, idx) : (T)Boolean.TRUE;
+
+                p.finish();
             }
 
             boolean needWal = needWalDeltaRecord(page);
@@ -414,6 +414,9 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
             if (moveUpRow != null) {
                 p.btmLvl++; // Get high.
                 p.row = moveUpRow;
+
+                if (p.invoke != null)
+                    p.invoke.row = moveUpRow;
 
                 // Here forward page can't be concurrently removed because we keep write lock on tail which is the only
                 // page who knows about the forward page, because it was just produced by split.
@@ -2196,8 +2199,8 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
         /** */
         int shift;
 
-        /** If {@code true}, then this operation is a part of invoke. */
-        boolean invoke;
+        /** If this operation is a part of invoke. */
+        Invoke invoke;
 
         /**
          * @param row Row.
@@ -2425,6 +2428,8 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
         @Override boolean found(BPlusIO<L> io, long pageAddr, int idx, int lvl) {
             if (lvl == 0) // Leaf: need to stop.
                 return true;
+
+            assert btmLvl == 0; // It can not be insert.
 
             // If we can get full row from the inner page, we have to replace it with the new one. On the way down
             // we can not miss inner key even in presence of concurrent operations because of `triangle` invariant +
@@ -2816,6 +2821,8 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
                     break;
 
                 case REMOVE:
+                    assert rowFound;
+
                     op = new Remove(row, false);
 
                     break;
@@ -2830,7 +2837,7 @@ public abstract class BPlusTree<L, T extends L> extends DataStructure implements
             if (op != null) {
                 op.copyFrom(this);
 
-                op.invoke = true;
+                op.invoke = this;
             }
         }
 
