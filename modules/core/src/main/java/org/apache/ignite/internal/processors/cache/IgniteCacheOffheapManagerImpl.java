@@ -932,7 +932,7 @@ public class IgniteCacheOffheapManagerImpl extends GridCacheManagerAdapter imple
 
             try {
                 // FIXME IGNITE-4652.
-                final boolean FAKE_INVOKE = true;
+                final boolean FAKE_INVOKE = false;
 
                 if (FAKE_INVOKE) {
                     CacheDataRow oldRow0 = dataTree.findOne(new SearchRow(key));
