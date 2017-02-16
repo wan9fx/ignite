@@ -33,7 +33,6 @@ import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.internal.CU;
 import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.internal.util.typedef.internal.U;
-import org.apache.ignite.lang.IgniteProductVersion;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -43,9 +42,6 @@ import org.jetbrains.annotations.Nullable;
 class GridDhtAtomicSingleUpdateFuture extends GridDhtAtomicAbstractUpdateFuture {
     /** */
     private static final long serialVersionUID = 0L;
-
-    /** */
-    private static final IgniteProductVersion SINGLE_UPDATE_REQUEST = IgniteProductVersion.fromString("1.7.4");
 
     /** Future keys. */
     private KeyCacheObject key;
@@ -97,7 +93,8 @@ class GridDhtAtomicSingleUpdateFuture extends GridDhtAtomicAbstractUpdateFuture 
 
     /** {@inheritDoc} */
     @Override protected GridDhtAtomicAbstractUpdateRequest createRequest(
-        ClusterNode node,
+        UUID nodeId,
+        UUID nearNodeId,
         long futId,
         GridCacheVersion writeVer,
         CacheWriteSynchronizationMode syncMode,
@@ -106,11 +103,13 @@ class GridDhtAtomicSingleUpdateFuture extends GridDhtAtomicAbstractUpdateFuture 
         long conflictExpireTime,
         @Nullable GridCacheVersion conflictVer
     ) {
-        if (canUseSingleRequest(node, ttl, conflictExpireTime, conflictVer)) {
+        if (canUseSingleRequest(ttl, conflictExpireTime, conflictVer)) {
             return new GridDhtAtomicSingleUpdateRequest(
                 cctx.cacheId(),
-                node.id(),
+                nodeId,
                 futId,
+                nearNodeId,
+                updateReq.futureId(),
                 writeVer,
                 syncMode,
                 topVer,
@@ -123,8 +122,10 @@ class GridDhtAtomicSingleUpdateFuture extends GridDhtAtomicAbstractUpdateFuture 
         else {
             return new GridDhtAtomicUpdateRequest(
                 cctx.cacheId(),
-                node.id(),
+                nodeId,
                 futId,
+                nearNodeId,
+                updateReq.futureId(),
                 writeVer,
                 syncMode,
                 topVer,
@@ -167,18 +168,15 @@ class GridDhtAtomicSingleUpdateFuture extends GridDhtAtomicAbstractUpdateFuture 
     }
 
     /**
-     * @param node Target node
      * @param ttl TTL.
      * @param conflictExpireTime Conflict expire time.
      * @param conflictVer Conflict version.
      * @return {@code True} if it is possible to use {@link GridDhtAtomicSingleUpdateRequest}.
      */
-    private boolean canUseSingleRequest(ClusterNode node,
-        long ttl,
+    private boolean canUseSingleRequest(long ttl,
         long conflictExpireTime,
         @Nullable GridCacheVersion conflictVer) {
-        return node.version().compareToIgnoreTimestamp(SINGLE_UPDATE_REQUEST) >= 0 &&
-            (ttl == CU.TTL_NOT_CHANGED) &&
+        return (ttl == CU.TTL_NOT_CHANGED) &&
             (conflictExpireTime == CU.EXPIRE_TIME_CALCULATE) &&
             conflictVer == null;
     }

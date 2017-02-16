@@ -256,7 +256,7 @@ public class GridNearAtomicUpdateFuture extends GridNearAtomicAbstractUpdateFutu
     }
 
     /** {@inheritDoc} */
-    @Override public void onResult(UUID nodeId, GridNearAtomicDhtResponse res) {
+    @Override public void onResult(UUID nodeId, GridDhtAtomicNearResponse res) {
         throw new UnsupportedOperationException();
     }
 

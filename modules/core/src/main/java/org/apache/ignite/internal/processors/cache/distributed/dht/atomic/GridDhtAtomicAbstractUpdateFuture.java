@@ -93,9 +93,6 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
     /** Continuous query closures. */
     private Collection<CI1<Boolean>> cntQryClsrs;
 
-    /** */
-    private final boolean waitForExchange;
-
     /** Response count. */
     private volatile int resCnt;
 
@@ -113,14 +110,12 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
         GridNearAtomicAbstractUpdateRequest updateReq,
         GridNearAtomicUpdateResponse updateRes) {
         this.cctx = cctx;
-
-        futId = cctx.mvcc().atomicFutureId();
         this.updateReq = updateReq;
         this.completionCb = completionCb;
         this.updateRes = updateRes;
         this.writeVer = writeVer;
 
-        waitForExchange = !(updateReq.topologyLocked() || (updateReq.fastMap() && !updateReq.clientRequest()));
+        futId = cctx.mvcc().atomicFutureId();
 
         if (log == null) {
             msgLog = cctx.shared().atomicMessageLogger();
@@ -130,6 +125,8 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
 
     /** {@inheritDoc} */
     @Override public final IgniteInternalFuture<Void> completeFuture(AffinityTopologyVersion topVer) {
+        boolean waitForExchange = !updateReq.topologyLocked();
+
         if (waitForExchange && updateReq.topologyVersion().compareTo(topVer) < 0)
             return this;
 
@@ -160,7 +157,9 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
      * @param updateCntr Partition update counter.
      */
     @SuppressWarnings("ForLoopReplaceableByForEach")
-    final void addWriteEntry(GridDhtCacheEntry entry,
+    final void addWriteEntry(
+        UUID nearNodeId,
+        GridDhtCacheEntry entry,
         @Nullable CacheObject val,
         EntryProcessor<Object, Object, Object> entryProcessor,
         long ttl,
@@ -190,7 +189,8 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
 
                 if (updateReq == null) {
                     updateReq = createRequest(
-                        node,
+                        node.id(),
+                        nearNodeId,
                         futId,
                         writeVer,
                         syncMode,
@@ -236,7 +236,9 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
      * @param ttl TTL for near cache update (optional).
      * @param expireTime Expire time for near cache update (optional).
      */
-    final void addNearWriteEntries(Collection<UUID> readers,
+    final void addNearWriteEntries(
+        UUID nearNodeId,
+        Collection<UUID> readers,
         GridDhtCacheEntry entry,
         @Nullable CacheObject val,
         EntryProcessor<Object, Object, Object> entryProcessor,
@@ -259,7 +261,8 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
                     continue;
 
                 updateReq = createRequest(
-                    node,
+                    node.id(),
+                    nearNodeId,
                     futId,
                     writeVer,
                     syncMode,
@@ -352,9 +355,21 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
      * Sends requests to remote nodes.
      */
     final void map() {
+        boolean fullSync = updateReq.writeSynchronizationMode() == FULL_SYNC;
+
         if (!F.isEmpty(mappings)) {
+            List<UUID> dhtNodes = null;
+
+            if (fullSync) {
+                dhtNodes = new ArrayList<>(mappings.size());
+
+                dhtNodes.addAll(mappings.keySet());
+            }
+
             for (GridDhtAtomicAbstractUpdateRequest req : mappings.values()) {
                 try {
+                    req.dhtNodes(dhtNodes);
+
                     cctx.io().send(req.nodeId(), req, cctx.ioPolicy());
 
                     if (msgLog.isDebugEnabled()) {
@@ -383,7 +398,7 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
 
         // Send response right away if no ACKs from backup is required.
         // Backups will send ACKs anyway, future will be completed after all backups have replied.
-        if (updateReq.writeSynchronizationMode() != FULL_SYNC)
+        if (!fullSync)
             completionCb.apply(updateReq, updateRes);
     }
 
@@ -400,7 +415,8 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
     }
 
     /**
-     * @param node Node.
+     * @param nodeId Node ID.
+     * @param nodeId Near node ID.
      * @param futId Future ID.
      * @param writeVer Update version.
      * @param syncMode Write synchronization mode.
@@ -411,7 +427,8 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
      * @return Request.
      */
     protected abstract GridDhtAtomicAbstractUpdateRequest createRequest(
-        ClusterNode node,
+        UUID nodeId,
+        UUID nearNodeId,
         long futId,
         GridCacheVersion writeVer,
         CacheWriteSynchronizationMode syncMode,
@@ -449,9 +466,9 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
                 for (CI1<Boolean> clsr : cntQryClsrs)
                     clsr.apply(suc);
             }
-
-            if (updateReq.writeSynchronizationMode() == FULL_SYNC)
-                completionCb.apply(updateReq, updateRes);
+//
+//            if (updateReq.writeSynchronizationMode() == FULL_SYNC)
+//                completionCb.apply(updateReq, updateRes);
 
             return true;
         }

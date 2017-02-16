@@ -156,6 +156,13 @@ public class GridDhtAtomicUpdateResponse extends GridCacheMessage implements Gri
         nearEvicted.add(key);
     }
 
+    /**
+     * @param nearEvicted Evicted near cache keys.
+     */
+    void nearEvicted(List<KeyCacheObject> nearEvicted) {
+        this.nearEvicted = nearEvicted;
+    }
+
     /** {@inheritDoc} */
     @Override public void prepareMarshal(GridCacheSharedContext ctx) throws IgniteCheckedException {
         super.prepareMarshal(ctx);

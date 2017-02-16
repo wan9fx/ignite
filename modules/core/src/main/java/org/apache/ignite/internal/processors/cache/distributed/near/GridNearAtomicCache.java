@@ -18,6 +18,7 @@
 package org.apache.ignite.internal.processors.cache.distributed.near;
 
 import java.io.Externalizable;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -43,7 +44,7 @@ import org.apache.ignite.internal.processors.cache.distributed.dht.GridDhtCacheA
 import org.apache.ignite.internal.processors.cache.distributed.dht.GridDhtInvalidPartitionException;
 import org.apache.ignite.internal.processors.cache.distributed.dht.atomic.GridDhtAtomicAbstractUpdateRequest;
 import org.apache.ignite.internal.processors.cache.distributed.dht.atomic.GridDhtAtomicCache;
-import org.apache.ignite.internal.processors.cache.distributed.dht.atomic.GridDhtAtomicUpdateResponse;
+import org.apache.ignite.internal.processors.cache.distributed.dht.atomic.GridDhtAtomicNearResponse;
 import org.apache.ignite.internal.processors.cache.distributed.dht.atomic.GridNearAtomicAbstractUpdateRequest;
 import org.apache.ignite.internal.processors.cache.distributed.dht.atomic.GridNearAtomicUpdateResponse;
 import org.apache.ignite.internal.processors.cache.dr.GridCacheDrInfo;
@@ -299,11 +300,12 @@ public class GridNearAtomicCache<K, V> extends GridNearCacheAdapter<K, V> {
      * @param nodeId Sender node ID.
      * @param req Dht atomic update request.
      * @param res Dht atomic update response.
+     * @return Evicted near keys (if any).
      */
-    public void processDhtAtomicUpdateRequest(
+    @Nullable public List<KeyCacheObject> processDhtAtomicUpdateRequest(
         UUID nodeId,
         GridDhtAtomicAbstractUpdateRequest req,
-        GridDhtAtomicUpdateResponse res
+        GridDhtAtomicNearResponse res
     ) {
         GridCacheVersion ver = req.writeVersion();
 
@@ -312,6 +314,8 @@ public class GridNearAtomicCache<K, V> extends GridNearCacheAdapter<K, V> {
         boolean intercept = req.forceTransformBackups() && ctx.config().getInterceptor() != null;
 
         String taskName = ctx.kernalContext().task().resolveTaskName(req.taskNameHash());
+
+        List<KeyCacheObject> nearEvicted = null;
 
         for (int i = 0; i < req.nearSize(); i++) {
             KeyCacheObject key = req.nearKey(i);
@@ -322,7 +326,10 @@ public class GridNearAtomicCache<K, V> extends GridNearCacheAdapter<K, V> {
                         GridCacheEntryEx entry = peekEx(key);
 
                         if (entry == null) {
-                            res.addNearEvicted(key);
+                            if (nearEvicted == null)
+                                nearEvicted = new ArrayList<>();
+
+                            nearEvicted.add(key);
 
                             break;
                         }
@@ -388,6 +395,8 @@ public class GridNearAtomicCache<K, V> extends GridNearCacheAdapter<K, V> {
                 res.addFailedKey(key, new IgniteCheckedException("Failed to update near cache key: " + key, e));
             }
         }
+
+        return nearEvicted;
     }
 
     /** {@inheritDoc} */

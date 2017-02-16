@@ -122,7 +122,9 @@ class GridDhtAtomicUpdateFuture extends GridDhtAtomicAbstractUpdateFuture {
     }
 
     /** {@inheritDoc} */
-    @Override protected GridDhtAtomicAbstractUpdateRequest createRequest(ClusterNode node,
+    @Override protected GridDhtAtomicAbstractUpdateRequest createRequest(
+        UUID nodeId,
+        UUID nearNodeId,
         long futId,
         GridCacheVersion writeVer,
         CacheWriteSynchronizationMode syncMode,
@@ -133,8 +135,10 @@ class GridDhtAtomicUpdateFuture extends GridDhtAtomicAbstractUpdateFuture {
     ) {
         return new GridDhtAtomicUpdateRequest(
             cctx.cacheId(),
-            node.id(),
+            nodeId,
             futId,
+            nearNodeId,
+            updateReq.futureId(),
             writeVer,
             syncMode,
             topVer,

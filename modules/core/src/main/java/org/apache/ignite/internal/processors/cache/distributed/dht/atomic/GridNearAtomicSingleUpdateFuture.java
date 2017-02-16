@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -50,6 +51,7 @@ import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.internal.util.typedef.X;
 import org.apache.ignite.internal.util.typedef.internal.CU;
 import org.apache.ignite.internal.util.typedef.internal.S;
+import org.apache.ignite.internal.util.typedef.internal.U;
 import org.jetbrains.annotations.Nullable;
 
 import static org.apache.ignite.internal.processors.cache.GridCacheOperation.TRANSFORM;
@@ -67,6 +69,9 @@ public class GridNearAtomicSingleUpdateFuture extends GridNearAtomicAbstractUpda
 
     /** Current request. */
     private GridNearAtomicAbstractUpdateRequest req;
+
+    /** */
+    private Set<UUID> rcvd;
 
     /** */
     private Set<UUID> mapping;
@@ -130,6 +135,7 @@ public class GridNearAtomicSingleUpdateFuture extends GridNearAtomicAbstractUpda
         GridNearAtomicUpdateResponse res = null;
 
         GridNearAtomicAbstractUpdateRequest req;
+        GridCacheReturn opRes0 = null;
 
         synchronized (mux) {
             req = this.req != null && this.req.nodeId().equals(nodeId) ? this.req : null;
@@ -147,6 +153,12 @@ public class GridNearAtomicSingleUpdateFuture extends GridNearAtomicAbstractUpda
 
                 res.addFailedKeys(req.keys(), e);
             }
+            else {
+                if (mapping != null && mapping.remove(nodeId)) {
+                    if (mapping.isEmpty() && opRes != null)
+                        opRes0 = opRes;
+                }
+            }
         }
 
         if (res != null) {
@@ -158,6 +170,8 @@ public class GridNearAtomicSingleUpdateFuture extends GridNearAtomicAbstractUpda
 
             onResult(nodeId, res, true);
         }
+        else if (opRes0 != null)
+            onDone(opRes0);
 
         return false;
     }
@@ -193,16 +207,44 @@ public class GridNearAtomicSingleUpdateFuture extends GridNearAtomicAbstractUpda
         return false;
     }
 
+    /**
+     * @param nodeIds DHT nodes.
+     */
+    private void initMapping(List<UUID> nodeIds) {
+        mapping = U.newHashSet(nodeIds.size());
+
+        for (UUID dhtNodeId : nodeIds) {
+            if (cctx.discovery().node(dhtNodeId) != null)
+                mapping.add(dhtNodeId);
+        }
+    }
+
     /** {@inheritDoc} */
-    @Override public void onResult(UUID nodeId, GridNearAtomicDhtResponse res) {
+    @Override public void onResult(UUID nodeId, GridDhtAtomicNearResponse res) {
         GridCacheReturn opRes0 = null;
 
         synchronized (mux) {
             if (futId == null || futId != res.futureId())
                 return;
 
-            if (mapping == null)
-                mapping = new HashSet<>(res.mapping());
+            if (res.mapping() != null) {
+                // Mapping is sent from dht nodes.
+                if (mapping == null)
+                    initMapping(res.mapping());
+            }
+            else {
+                // Mapping and result are sent from primary.
+                if (mapping == null) {
+                    if (rcvd == null)
+                        rcvd = new HashSet<>();
+
+                    rcvd.add(nodeId);
+
+                    return; // Need wait for response from primary.
+                }
+                else
+                    mapping.remove(nodeId);
+            }
 
             mapping.remove(nodeId);
 
@@ -250,6 +292,7 @@ public class GridNearAtomicSingleUpdateFuture extends GridNearAtomicAbstractUpda
                     mapErrTopVer = req.topologyVersion();
             }
             else if (res.error() != null) {
+                // TODO IGNITE-4705: assert only 1 key?
                 if (res.failedKeys() != null) {
                     if (err == null)
                         err = new CachePartialUpdateCheckedException(
@@ -280,6 +323,18 @@ public class GridNearAtomicSingleUpdateFuture extends GridNearAtomicAbstractUpda
                 }
                 else
                     opRes = ret;
+
+                if (res.mapping() != null) {
+                    initMapping(res.mapping());
+
+                    if (rcvd != null)
+                        mapping.removeAll(rcvd);
+                }
+                else
+                    mapping = Collections.emptySet();
+
+                if (!mapping.isEmpty())
+                    return;
             }
 
             if (remapKey) {

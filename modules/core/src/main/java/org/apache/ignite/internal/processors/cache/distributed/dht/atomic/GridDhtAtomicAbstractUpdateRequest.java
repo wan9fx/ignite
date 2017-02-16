@@ -18,10 +18,13 @@
 package org.apache.ignite.internal.processors.cache.distributed.dht.atomic;
 
 import java.io.Externalizable;
+import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.UUID;
 import javax.cache.processor.EntryProcessor;
 import org.apache.ignite.IgniteLogger;
 import org.apache.ignite.cache.CacheWriteSynchronizationMode;
+import org.apache.ignite.internal.GridDirectCollection;
 import org.apache.ignite.internal.GridDirectTransient;
 import org.apache.ignite.internal.processors.cache.CacheObject;
 import org.apache.ignite.internal.processors.cache.GridCacheDeployable;
@@ -29,6 +32,9 @@ import org.apache.ignite.internal.processors.cache.GridCacheMessage;
 import org.apache.ignite.internal.processors.cache.GridCacheSharedContext;
 import org.apache.ignite.internal.processors.cache.KeyCacheObject;
 import org.apache.ignite.internal.processors.cache.version.GridCacheVersion;
+import org.apache.ignite.plugin.extensions.communication.MessageCollectionItemType;
+import org.apache.ignite.plugin.extensions.communication.MessageReader;
+import org.apache.ignite.plugin.extensions.communication.MessageWriter;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -46,6 +52,16 @@ public abstract class GridDhtAtomicAbstractUpdateRequest extends GridCacheMessag
     @GridDirectTransient
     private boolean onRes;
 
+    /** */
+    private UUID nearNodeId;
+
+    /** */
+    private long nearFutId;
+
+    /** */
+    @GridDirectCollection(UUID.class)
+    private List<UUID> dhtNodes;
+
     /**
      * Empty constructor required by {@link Externalizable}.
      */
@@ -58,10 +74,35 @@ public abstract class GridDhtAtomicAbstractUpdateRequest extends GridCacheMessag
      *
      * @param cacheId Cache ID.
      * @param nodeId Node ID.
+     * @param nearNodeId Near node ID.
+     * @param nearFutId Future ID on near node.
      */
-    protected GridDhtAtomicAbstractUpdateRequest(int cacheId, UUID nodeId) {
+    protected GridDhtAtomicAbstractUpdateRequest(int cacheId, UUID nodeId, UUID nearNodeId, long nearFutId) {
         this.cacheId = cacheId;
         this.nodeId = nodeId;
+        this.nearNodeId = nearNodeId;
+        this.nearFutId = nearFutId;
+    }
+
+    /**
+     * @return Near node ID.
+     */
+    public UUID nearNodeId() {
+        return nearNodeId;
+    }
+
+    /**
+     * @param dhtNodes DHT nodes.
+     */
+    public void dhtNodes(List<UUID> dhtNodes) {
+        this.dhtNodes = dhtNodes;
+    }
+
+    /**
+     * @return DHT nodes.
+     */
+    public List<UUID> dhtNodes() {
+        return dhtNodes;
     }
 
     /** {@inheritDoc} */
@@ -166,9 +207,16 @@ public abstract class GridDhtAtomicAbstractUpdateRequest extends GridCacheMessag
     public abstract int taskNameHash();
 
     /**
-     * @return Version assigned on primary node.
+     * @return Future ID on primary node.
      */
     public abstract long futureId();
+
+    /**
+     * @return Future ID on near node.
+     */
+    public final long nearFutureId() {
+        return nearFutId;
+    }
 
     /**
      * @return Write version.
@@ -284,4 +332,87 @@ public abstract class GridDhtAtomicAbstractUpdateRequest extends GridCacheMessag
      * @return Optional arguments for entry processor.
      */
     @Nullable public abstract Object[] invokeArguments();
+
+    /** {@inheritDoc} */
+    @Override public byte fieldsCount() {
+        return 6;
+    }
+
+    /** {@inheritDoc} */
+    @Override public boolean writeTo(ByteBuffer buf, MessageWriter writer) {
+        writer.setBuffer(buf);
+
+        if (!super.writeTo(buf, writer))
+            return false;
+
+        if (!writer.isHeaderWritten()) {
+            if (!writer.writeHeader(directType(), fieldsCount()))
+                return false;
+
+            writer.onHeaderWritten();
+        }
+
+        switch (writer.state()) {
+            case 3:
+                if (!writer.writeCollection("dhtNodes", dhtNodes, MessageCollectionItemType.UUID))
+                    return false;
+
+                writer.incrementState();
+
+            case 4:
+                if (!writer.writeLong("nearFutId", nearFutId))
+                    return false;
+
+                writer.incrementState();
+
+            case 5:
+                if (!writer.writeUuid("nearNodeId", nearNodeId))
+                    return false;
+
+                writer.incrementState();
+
+        }
+
+        return true;
+    }
+
+    /** {@inheritDoc} */
+    @Override public boolean readFrom(ByteBuffer buf, MessageReader reader) {
+        reader.setBuffer(buf);
+
+        if (!reader.beforeMessageRead())
+            return false;
+
+        if (!super.readFrom(buf, reader))
+            return false;
+
+        switch (reader.state()) {
+            case 3:
+                dhtNodes = reader.readCollection("dhtNodes", MessageCollectionItemType.UUID);
+
+                if (!reader.isLastRead())
+                    return false;
+
+                reader.incrementState();
+
+            case 4:
+                nearFutId = reader.readLong("nearFutId");
+
+                if (!reader.isLastRead())
+                    return false;
+
+                reader.incrementState();
+
+            case 5:
+                nearNodeId = reader.readUuid("nearNodeId");
+
+                if (!reader.isLastRead())
+                    return false;
+
+                reader.incrementState();
+
+        }
+
+        return reader.afterMessageRead(GridDhtAtomicAbstractUpdateRequest.class);
+    }
 }

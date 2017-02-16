@@ -19,19 +19,21 @@ package org.apache.ignite.internal.processors.cache.distributed.dht.atomic;
 
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
+import org.apache.ignite.IgniteCheckedException;
 import org.apache.ignite.internal.GridDirectCollection;
 import org.apache.ignite.internal.processors.cache.GridCacheMessage;
 import org.apache.ignite.internal.processors.cache.GridCacheReturn;
+import org.apache.ignite.internal.processors.cache.GridCacheSharedContext;
+import org.apache.ignite.internal.processors.cache.KeyCacheObject;
 import org.apache.ignite.plugin.extensions.communication.MessageCollectionItemType;
 import org.apache.ignite.plugin.extensions.communication.MessageReader;
 import org.apache.ignite.plugin.extensions.communication.MessageWriter;
 
 /**
- * TODO IGNITE-4705: no need send mapping if it == affinity.
+ * TODO IGNITE-4705: no not send mapping if it == affinity?
  */
-public class GridNearAtomicDhtResponse extends GridCacheMessage {
+public class GridDhtAtomicNearResponse extends GridCacheMessage {
     /** */
     private static final long serialVersionUID = 0L;
 
@@ -54,10 +56,13 @@ public class GridNearAtomicDhtResponse extends GridCacheMessage {
     /** */
     private byte flags;
 
+    /** */
+    private UpdateErrors errors;
+
     /**
      *
      */
-    public GridNearAtomicDhtResponse() {
+    public GridDhtAtomicNearResponse() {
         // No-op.
     }
 
@@ -65,9 +70,20 @@ public class GridNearAtomicDhtResponse extends GridCacheMessage {
      * @param futId Future ID.
      * @param mapping Update mapping.
      */
-    public GridNearAtomicDhtResponse(long futId, List<UUID> mapping) {
+    public GridDhtAtomicNearResponse(long futId, List<UUID> mapping) {
         this.futId = futId;
         this.mapping = mapping;
+    }
+
+    /**
+     * @param key Key.
+     * @param e Error.
+     */
+    public void addFailedKey(KeyCacheObject key, Throwable e) {
+        if (errors == null)
+            errors = new UpdateErrors();
+
+        errors.addFailedKey(key, e);
     }
 
     /**
@@ -134,12 +150,28 @@ public class GridNearAtomicDhtResponse extends GridCacheMessage {
 
     /** {@inheritDoc} */
     @Override public byte fieldsCount() {
-        return 6;
+        return 7;
     }
 
     /** {@inheritDoc} */
     @Override public boolean addDeploymentInfo() {
         return false;
+    }
+
+    /** {@inheritDoc} */
+    @Override public void prepareMarshal(GridCacheSharedContext ctx) throws IgniteCheckedException {
+        super.prepareMarshal(ctx);
+
+        if (errors != null)
+            errors.prepareMarshal(this, ctx.cacheContext(cacheId));
+    }
+
+    /** {@inheritDoc} */
+    @Override public void finishUnmarshal(GridCacheSharedContext ctx, ClassLoader ldr) throws IgniteCheckedException {
+        super.finishUnmarshal(ctx, ldr);
+
+        if (errors != null)
+            errors.finishUnmarshal(this, ctx.cacheContext(cacheId), ldr);
     }
 
     /** {@inheritDoc} */
@@ -158,18 +190,24 @@ public class GridNearAtomicDhtResponse extends GridCacheMessage {
 
         switch (writer.state()) {
             case 3:
-                if (!writer.writeByte("flags", flags))
+                if (!writer.writeMessage("errors", errors))
                     return false;
 
                 writer.incrementState();
 
             case 4:
-                if (!writer.writeLong("futId", futId))
+                if (!writer.writeByte("flags", flags))
                     return false;
 
                 writer.incrementState();
 
             case 5:
+                if (!writer.writeLong("futId", futId))
+                    return false;
+
+                writer.incrementState();
+
+            case 6:
                 if (!writer.writeCollection("mapping", mapping, MessageCollectionItemType.UUID))
                     return false;
 
@@ -192,7 +230,7 @@ public class GridNearAtomicDhtResponse extends GridCacheMessage {
 
         switch (reader.state()) {
             case 3:
-                flags = reader.readByte("flags");
+                errors = reader.readMessage("errors");
 
                 if (!reader.isLastRead())
                     return false;
@@ -200,7 +238,7 @@ public class GridNearAtomicDhtResponse extends GridCacheMessage {
                 reader.incrementState();
 
             case 4:
-                futId = reader.readLong("futId");
+                flags = reader.readByte("flags");
 
                 if (!reader.isLastRead())
                     return false;
@@ -208,6 +246,14 @@ public class GridNearAtomicDhtResponse extends GridCacheMessage {
                 reader.incrementState();
 
             case 5:
+                futId = reader.readLong("futId");
+
+                if (!reader.isLastRead())
+                    return false;
+
+                reader.incrementState();
+
+            case 6:
                 mapping = reader.readCollection("mapping", MessageCollectionItemType.UUID);
 
                 if (!reader.isLastRead())
@@ -217,6 +263,6 @@ public class GridNearAtomicDhtResponse extends GridCacheMessage {
 
         }
 
-        return reader.afterMessageRead(GridNearAtomicDhtResponse.class);
+        return reader.afterMessageRead(GridDhtAtomicNearResponse.class);
     }
 }

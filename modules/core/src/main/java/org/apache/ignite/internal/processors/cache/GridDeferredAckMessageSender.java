@@ -21,7 +21,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-import org.apache.ignite.internal.processors.cache.version.GridCacheVersion;
 import org.apache.ignite.internal.processors.closure.GridClosureProcessor;
 import org.apache.ignite.internal.processors.timeout.GridTimeoutObject;
 import org.apache.ignite.internal.processors.timeout.GridTimeoutProcessor;
@@ -41,16 +40,16 @@ public abstract class GridDeferredAckMessageSender<T> {
     private GridTimeoutProcessor time;
 
     /** Closure processor. */
-    public GridClosureProcessor closure;
+    public GridClosureProcessor c;
 
     /**
      * @param time Time.
-     * @param closure Closure.
+     * @param c Closure.
      */
     public GridDeferredAckMessageSender(GridTimeoutProcessor time,
-        GridClosureProcessor closure) {
+        GridClosureProcessor c) {
         this.time = time;
-        this.closure = closure;
+        this.c = c;
     }
 
     /**
@@ -151,7 +150,7 @@ public abstract class GridDeferredAckMessageSender<T> {
         /** {@inheritDoc} */
         @Override public void onTimeout() {
             if (guard.compareAndSet(false, true)) {
-                closure.runLocalSafe(new Runnable() {
+                c.runLocalSafe(new Runnable() {
                     @Override public void run() {
                         writeLock().lock();
 
