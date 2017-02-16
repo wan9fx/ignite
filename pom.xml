@@ -88,6 +88,7 @@
         <module>modules/web/ignite-websphere-test</module>
         <module>modules/cassandra</module>
         <module>modules/flink</module>
+        <module>modules/kubernetes</module>
     </modules>
 
     <profiles>
@@ -506,6 +507,7 @@
                                             <fileset dir="${basedir}/target/release-package/benchmarks/config/">
                                                 <include name="*.*" />
                                                 <exclude name="benchmark.properties"/>
+                                                <exclude name="benchmark-sample.properties"/>
                                                 <exclude name="benchmark-multicast.properties"/>
                                                 <exclude name="ignite-base-config.xml"/>
                                                 <exclude name="ignite-localhost-config.xml"/>
