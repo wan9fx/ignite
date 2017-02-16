@@ -50,17 +50,22 @@ import org.apache.ignite.internal.processors.cache.database.tree.reuse.ReuseList
 import org.apache.ignite.internal.util.GridConcurrentHashSet;
 import org.apache.ignite.internal.util.GridRandom;
 import org.apache.ignite.internal.util.GridStripedLock;
+import org.apache.ignite.internal.util.IgniteTree;
 import org.apache.ignite.internal.util.lang.GridCursor;
 import org.apache.ignite.internal.util.typedef.X;
 import org.apache.ignite.internal.util.typedef.internal.SB;
 import org.apache.ignite.internal.util.typedef.internal.U;
 import org.apache.ignite.testframework.GridTestUtils;
 import org.apache.ignite.testframework.junits.common.GridCommonAbstractTest;
+import org.jetbrains.annotations.Nullable;
 import org.jsr166.ConcurrentHashMap8;
 import org.jsr166.ConcurrentLinkedHashMap;
 
 import static org.apache.ignite.internal.pagemem.PageIdUtils.effectivePageId;
 import static org.apache.ignite.internal.processors.cache.database.tree.BPlusTree.rnd;
+import static org.apache.ignite.internal.util.IgniteTree.OperationType.NOOP;
+import static org.apache.ignite.internal.util.IgniteTree.OperationType.PUT;
+import static org.apache.ignite.internal.util.IgniteTree.OperationType.REMOVE;
 
 /**
  */
@@ -561,6 +566,122 @@ public class BPlusTreeSelfTest extends GridCommonAbstractTest {
     /**
      * @throws IgniteCheckedException If failed.
      */
+    public void testRandomInvoke_1_30_1() throws IgniteCheckedException {
+        MAX_PER_PAGE = 1;
+        CNT = 30;
+
+        doTestRandomInvoke(true);
+    }
+
+    /**
+     * @throws IgniteCheckedException If failed.
+     */
+    public void testRandomInvoke_1_30_0() throws IgniteCheckedException {
+        MAX_PER_PAGE = 1;
+        CNT = 30;
+
+        doTestRandomInvoke(false);
+    }
+
+    /**
+     * @param canGetRow Can get row from inner page.
+     * @throws IgniteCheckedException If failed.
+     */
+    private void doTestRandomInvoke(boolean canGetRow) throws IgniteCheckedException {
+        TestTree tree = createTestTree(canGetRow);
+
+        Map<Long,Long> map = new HashMap<>();
+
+        int loops = reuseList == null ? 100_000 : 300_000;
+
+        for (int i = 0 ; i < loops; i++) {
+            final Long x = (long)BPlusTree.randomInt(CNT);
+            final int rnd = BPlusTree.randomInt(11);
+
+            // Update map.
+            if (!map.containsKey(x)) {
+                if (rnd % 2 == 0) {
+                    map.put(x, x);
+
+                    X.println("put0: " + x);
+                }
+                else {
+                    X.println("noop0: " + x);
+                }
+            }
+            else {
+                if (rnd % 2 == 0) {
+                    X.println("put1: " + x);
+                }
+                else if (rnd % 3 == 0) {
+                    map.remove(x);
+
+                    X.println("rmv1: " + x);
+                }
+                else {
+                    X.println("noop1: " + x);
+                }
+            }
+
+            // Consistently update tree.
+            tree.invoke(x, new IgniteTree.InvokeClosure<Long>() {
+
+                IgniteTree.OperationType op;
+
+                Long newRow;
+
+                @Override public void call(@Nullable Long row) throws IgniteCheckedException {
+                    if (row == null) {
+                        if (rnd % 2 == 0) {
+                            op = PUT;
+                            newRow = x;
+                        }
+                        else {
+                            op = NOOP;
+                            newRow = null;
+                        }
+                    }
+                    else {
+                        assertEquals(x, row);
+
+                        if (rnd % 2 == 0) {
+                            op = PUT;
+                            newRow = x; // We can not replace x with y here, because keys must be equal.
+                        }
+                        else if (rnd % 3 == 0) {
+                            op = REMOVE;
+                            newRow = null;
+                        }
+                        else {
+                            op = NOOP;
+                            newRow = null;
+                        }
+                    }
+                }
+
+                @Override public Long newRow() {
+                    return newRow;
+                }
+
+                @Override public IgniteTree.OperationType operationType() {
+                    return op;
+                }
+            });
+
+            assertNoLocks();
+
+            X.println(tree.printTree());
+
+            tree.validateTree();
+
+//            if (i % 100 == 0)
+                assertEqualContents(tree, map);
+        }
+    }
+
+    /**
+     * @throws IgniteCheckedException If failed.
+     */
     public void testRandomPutRemove_1_30_0() throws IgniteCheckedException {
         MAX_PER_PAGE = 1;
         CNT = 30;
@@ -840,24 +961,32 @@ public class BPlusTreeSelfTest extends GridCommonAbstractTest {
 //            X.println(tree.printTree());
             tree.validateTree();
 
-            if (i % 100 == 0) {
-                GridCursor<Long> cursor = tree.find(null, null);
-
-                while (cursor.next()) {
-                    x = cursor.get();
-
-                    assert x != null;
-
-                    assertEquals(map.get(x), x);
-
-                    assertNoLocks();
-                }
-
-                assertEquals(map.size(), tree.size());
-
-                assertNoLocks();
-            }
+            if (i % 100 == 0)
+                assertEqualContents(tree, map);
         }
+    }
+
+    /**
+     * @param tree Tree.
+     * @param map Map.
+     * @throws IgniteCheckedException If failed.
+     */
+    private void assertEqualContents(IgniteTree<Long, Long> tree, Map<Long,Long> map) throws IgniteCheckedException {
+        GridCursor<Long> cursor = tree.find(null, null);
+
+        while (cursor.next()) {
+            Long x = cursor.get();
+
+            assert x != null;
+
+            assertEquals(map.get(x), x);
+
+            assertNoLocks();
+        }
+
+        assertEquals(map.size(), tree.size());
+
+        assertNoLocks();
     }
 
     /**
