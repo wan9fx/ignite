@@ -26,9 +26,12 @@ import org.apache.ignite.internal.processors.cache.GridCacheMessage;
 import org.apache.ignite.internal.processors.cache.GridCacheReturn;
 import org.apache.ignite.internal.processors.cache.GridCacheSharedContext;
 import org.apache.ignite.internal.processors.cache.KeyCacheObject;
+import org.apache.ignite.internal.util.typedef.internal.S;
 import org.apache.ignite.plugin.extensions.communication.MessageCollectionItemType;
 import org.apache.ignite.plugin.extensions.communication.MessageReader;
 import org.apache.ignite.plugin.extensions.communication.MessageWriter;
+
+import static org.apache.ignite.internal.processors.cache.distributed.dht.atomic.GridDhtAtomicAbstractUpdateRequest.*;
 
 /**
  * TODO IGNITE-4705: no not send mapping if it == affinity?
@@ -39,12 +42,6 @@ public class GridDhtAtomicNearResponse extends GridCacheMessage {
 
     /** Message index. */
     public static final int CACHE_MSG_IDX = nextIndexId();
-
-    /** */
-    private static final int HAS_RESULT_MASK = 0x1;
-
-    /** */
-    private static final int RESULT_SUCCESS_MASK = 0x2;
 
     /** */
     private long futId;
@@ -67,12 +64,16 @@ public class GridDhtAtomicNearResponse extends GridCacheMessage {
     }
 
     /**
+     * @param cacheId Cache ID.
      * @param futId Future ID.
      * @param mapping Update mapping.
+     * @param flags Flags.
      */
-    public GridDhtAtomicNearResponse(long futId, List<UUID> mapping) {
+    public GridDhtAtomicNearResponse(int cacheId, long futId, List<UUID> mapping, byte flags) {
+        this.cacheId = cacheId;
         this.futId = futId;
         this.mapping = mapping;
+        this.flags = flags;
     }
 
     /**
@@ -87,28 +88,19 @@ public class GridDhtAtomicNearResponse extends GridCacheMessage {
     }
 
     /**
-     * @param success Success flag.
-     */
-    public void setResult(boolean success) {
-        setFlag(true, HAS_RESULT_MASK);
-
-        setFlag(success, RESULT_SUCCESS_MASK);
-    }
-
-    /**
      * @return Operation result.
      */
     public GridCacheReturn result() {
         assert hasResult();
 
-        return new GridCacheReturn(true, isFlag(RESULT_SUCCESS_MASK));
+        return new GridCacheReturn(true, isFlag(DHT_ATOMIC_RESULT_SUCCESS_MASK));
     }
 
     /**
      * @return {@code True} if response contains operation result.
      */
     public boolean hasResult() {
-        return isFlag(HAS_RESULT_MASK);
+        return isFlag(DHT_ATOMIC_HAS_RESULT_MASK);
     }
 
     /**
@@ -141,6 +133,11 @@ public class GridDhtAtomicNearResponse extends GridCacheMessage {
      */
     public long futureId() {
         return futId;
+    }
+
+    /** {@inheritDoc} */
+    @Override public int lookupIndex() {
+        return CACHE_MSG_IDX;
     }
 
     /** {@inheritDoc} */
@@ -264,5 +261,10 @@ public class GridDhtAtomicNearResponse extends GridCacheMessage {
         }
 
         return reader.afterMessageRead(GridDhtAtomicNearResponse.class);
+    }
+
+    /** {@inheritDoc} */
+    @Override public String toString() {
+        return S.toString(GridDhtAtomicNearResponse.class, this);
     }
 }

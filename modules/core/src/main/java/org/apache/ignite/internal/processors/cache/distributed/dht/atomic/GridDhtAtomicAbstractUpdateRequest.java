@@ -41,6 +41,21 @@ import org.jetbrains.annotations.Nullable;
  *
  */
 public abstract class GridDhtAtomicAbstractUpdateRequest extends GridCacheMessage implements GridCacheDeployable {
+    /** Skip store flag bit mask. */
+    public static final int DHT_ATOMIC_SKIP_STORE_FLAG_MASK = 0x01;
+
+    /** Keep binary flag. */
+    public static final int DHT_ATOMIC_KEEP_BINARY_FLAG_MASK = 0x02;
+
+    /** Near cache key flag. */
+    public static final int DHT_ATOMIC_NEAR_FLAG_MASK = 0x04;
+
+    /** */
+    public static final int DHT_ATOMIC_HAS_RESULT_MASK = 0x08;
+
+    /** */
+    public static final int DHT_ATOMIC_RESULT_SUCCESS_MASK = 0x10;
+
     /** Message index. */
     public static final int CACHE_MSG_IDX = nextIndexId();
 
@@ -57,6 +72,9 @@ public abstract class GridDhtAtomicAbstractUpdateRequest extends GridCacheMessag
 
     /** */
     private long nearFutId;
+
+    /** Additional flags. */
+    protected byte flags;
 
     /** */
     @GridDirectCollection(UUID.class)
@@ -82,6 +100,15 @@ public abstract class GridDhtAtomicAbstractUpdateRequest extends GridCacheMessag
         this.nodeId = nodeId;
         this.nearNodeId = nearNodeId;
         this.nearFutId = nearFutId;
+    }
+
+    /**
+     * @param success Success flag.
+     */
+    public void setResult(boolean success) {
+        setFlag(true, DHT_ATOMIC_HAS_RESULT_MASK);
+
+        setFlag(success, DHT_ATOMIC_RESULT_SUCCESS_MASK);
     }
 
     /**
@@ -115,6 +142,13 @@ public abstract class GridDhtAtomicAbstractUpdateRequest extends GridCacheMessag
      */
     public UUID nodeId() {
         return nodeId;
+    }
+
+    /**
+     * @return Flags.
+     */
+    public final byte flags() {
+        return flags;
     }
 
     /**
@@ -333,9 +367,29 @@ public abstract class GridDhtAtomicAbstractUpdateRequest extends GridCacheMessag
      */
     @Nullable public abstract Object[] invokeArguments();
 
+    /**
+     * Sets flag mask.
+     *
+     * @param flag Set or clear.
+     * @param mask Mask.
+     */
+    protected final void setFlag(boolean flag, int mask) {
+        flags = flag ? (byte)(flags | mask) : (byte)(flags & ~mask);
+    }
+
+    /**
+     * Reags flag mask.
+     *
+     * @param mask Mask to read.
+     * @return Flag value.
+     */
+    protected final boolean isFlag(int mask) {
+        return (flags & mask) != 0;
+    }
+
     /** {@inheritDoc} */
     @Override public byte fieldsCount() {
-        return 6;
+        return 7;
     }
 
     /** {@inheritDoc} */
@@ -360,12 +414,18 @@ public abstract class GridDhtAtomicAbstractUpdateRequest extends GridCacheMessag
                 writer.incrementState();
 
             case 4:
-                if (!writer.writeLong("nearFutId", nearFutId))
+                if (!writer.writeByte("flags", flags))
                     return false;
 
                 writer.incrementState();
 
             case 5:
+                if (!writer.writeLong("nearFutId", nearFutId))
+                    return false;
+
+                writer.incrementState();
+
+            case 6:
                 if (!writer.writeUuid("nearNodeId", nearNodeId))
                     return false;
 
@@ -396,7 +456,7 @@ public abstract class GridDhtAtomicAbstractUpdateRequest extends GridCacheMessag
                 reader.incrementState();
 
             case 4:
-                nearFutId = reader.readLong("nearFutId");
+                flags = reader.readByte("flags");
 
                 if (!reader.isLastRead())
                     return false;
@@ -404,6 +464,14 @@ public abstract class GridDhtAtomicAbstractUpdateRequest extends GridCacheMessag
                 reader.incrementState();
 
             case 5:
+                nearFutId = reader.readLong("nearFutId");
+
+                if (!reader.isLastRead())
+                    return false;
+
+                reader.incrementState();
+
+            case 6:
                 nearNodeId = reader.readUuid("nearNodeId");
 
                 if (!reader.isLastRead())

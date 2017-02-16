@@ -48,9 +48,6 @@ public class GridDhtAtomicSingleUpdateRequest extends GridDhtAtomicAbstractUpdat
     /** */
     private static final long serialVersionUID = 0L;
 
-    /** Near cache key flag. */
-    private static final int NEAR_FLAG_MASK = 0x80;
-
     /** Future ID on primary. */
     protected long futId;
 
@@ -68,9 +65,6 @@ public class GridDhtAtomicSingleUpdateRequest extends GridDhtAtomicAbstractUpdat
 
     /** Task name hash. */
     protected int taskNameHash;
-
-    /** Additional flags. */
-    protected byte flags;
 
     /** Key to update. */
     @GridToStringInclude
@@ -226,7 +220,7 @@ public class GridDhtAtomicSingleUpdateRequest extends GridDhtAtomicAbstractUpdat
 
     /** {@inheritDoc} */
     @Override public boolean skipStore() {
-        return isFlag(SKIP_STORE_FLAG_MASK);
+        return isFlag(DHT_ATOMIC_SKIP_STORE_FLAG_MASK);
     }
 
     /** {@inheritDoc} */
@@ -364,21 +358,21 @@ public class GridDhtAtomicSingleUpdateRequest extends GridDhtAtomicAbstractUpdat
 
     /** {@inheritDoc} */
     @Override public boolean keepBinary() {
-        return isFlag(KEEP_BINARY_FLAG_MASK);
+        return isFlag(DHT_ATOMIC_KEEP_BINARY_FLAG_MASK);
     }
 
     /**
      *
      */
     private boolean near() {
-        return isFlag(NEAR_FLAG_MASK);
+        return isFlag(DHT_ATOMIC_NEAR_FLAG_MASK);
     }
 
     /**
      *
      */
     private void near(boolean near) {
-        setFlag(near, NEAR_FLAG_MASK);
+        setFlag(near, DHT_ATOMIC_NEAR_FLAG_MASK);
     }
 
     /** {@inheritDoc} */
@@ -425,12 +419,6 @@ public class GridDhtAtomicSingleUpdateRequest extends GridDhtAtomicAbstractUpdat
         }
 
         switch (writer.state()) {
-            case 6:
-                if (!writer.writeByte("flags", flags))
-                    return false;
-
-                writer.incrementState();
-
             case 7:
                 if (!writer.writeLong("futId", futId))
                     return false;
@@ -513,14 +501,6 @@ public class GridDhtAtomicSingleUpdateRequest extends GridDhtAtomicAbstractUpdat
             return false;
 
         switch (reader.state()) {
-            case 6:
-                flags = reader.readByte("flags");
-
-                if (!reader.isLastRead())
-                    return false;
-
-                reader.incrementState();
-
             case 7:
                 futId = reader.readLong("futId");
 
@@ -656,26 +636,6 @@ public class GridDhtAtomicSingleUpdateRequest extends GridDhtAtomicAbstractUpdat
     /** {@inheritDoc} */
     @Override public byte fieldsCount() {
         return 18;
-    }
-
-    /**
-     * Sets flag mask.
-     *
-     * @param flag Set or clear.
-     * @param mask Mask.
-     */
-    private void setFlag(boolean flag, int mask) {
-        flags = flag ? (byte)(flags | mask) : (byte)(flags & ~mask);
-    }
-
-    /**
-     * Reags flag mask.
-     *
-     * @param mask Mask to read.
-     * @return Flag value.
-     */
-    private boolean isFlag(int mask) {
-        return (flags & mask) != 0;
     }
 
     /** {@inheritDoc} */

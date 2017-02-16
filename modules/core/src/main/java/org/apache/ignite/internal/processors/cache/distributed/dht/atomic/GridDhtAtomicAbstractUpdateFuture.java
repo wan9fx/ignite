@@ -34,6 +34,7 @@ import org.apache.ignite.internal.processors.affinity.AffinityTopologyVersion;
 import org.apache.ignite.internal.processors.cache.CacheObject;
 import org.apache.ignite.internal.processors.cache.GridCacheAtomicFuture;
 import org.apache.ignite.internal.processors.cache.GridCacheContext;
+import org.apache.ignite.internal.processors.cache.GridCacheReturn;
 import org.apache.ignite.internal.processors.cache.KeyCacheObject;
 import org.apache.ignite.internal.processors.cache.distributed.dht.GridDhtCacheEntry;
 import org.apache.ignite.internal.processors.cache.version.GridCacheVersion;
@@ -353,8 +354,10 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
 
     /**
      * Sends requests to remote nodes.
+     *
+     * @param ret Cache operation return value.
      */
-    final void map() {
+    final void map(GridCacheReturn ret) {
         boolean fullSync = updateReq.writeSynchronizationMode() == FULL_SYNC;
 
         if (!F.isEmpty(mappings)) {
@@ -369,6 +372,7 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
             for (GridDhtAtomicAbstractUpdateRequest req : mappings.values()) {
                 try {
                     req.dhtNodes(dhtNodes);
+                    req.setResult(ret.success());
 
                     cctx.io().send(req.nodeId(), req, cctx.ioPolicy());
 
@@ -392,14 +396,18 @@ public abstract class GridDhtAtomicAbstractUpdateFuture extends GridFutureAdapte
                     registerResponse(req.nodeId());
                 }
             }
-        }
-        else
-            onDone();
 
-        // Send response right away if no ACKs from backup is required.
-        // Backups will send ACKs anyway, future will be completed after all backups have replied.
-        if (!fullSync)
+            // Send response right away if no ACKs from backup is required.
+            // Backups will send ACKs anyway, future will be completed after all backups have replied.
+            if (!fullSync)
+                completionCb.apply(updateReq, updateRes);
+        }
+        else {
+            // Reply.
             completionCb.apply(updateReq, updateRes);
+
+            onDone();
+        }
     }
 
     /**

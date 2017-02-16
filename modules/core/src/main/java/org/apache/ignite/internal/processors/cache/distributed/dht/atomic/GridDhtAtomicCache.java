@@ -421,7 +421,9 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
                 }
             });
 
-        ctx.io().addHandler(ctx.cacheId(), GridDhtAtomicNearResponse.class, new CI2<UUID, GridDhtAtomicNearResponse>() {
+        ctx.io().addHandler(ctx.cacheId(),
+            GridDhtAtomicNearResponse.class,
+            new CI2<UUID, GridDhtAtomicNearResponse>() {
             @Override public void apply(UUID uuid, GridDhtAtomicNearResponse msg) {
                 processDhtAtomicNearResponse(uuid, msg);
             }
@@ -1969,7 +1971,7 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
         else {
             // If there are backups, map backup update future.
             if (dhtFut != null)
-                dhtFut.map();
+                dhtFut.map(res.returnValue());
                 // Otherwise, complete the call.
             else
                 completionCb.apply(req, res);
@@ -3226,9 +3228,9 @@ public class GridDhtAtomicCache<K, V> extends GridDhtCacheAdapter<K, V> {
         GridCacheVersion ver = req.writeVersion();
 
         GridDhtAtomicNearResponse nearRes = ctx.config().getWriteSynchronizationMode() == FULL_SYNC ?
-            new GridDhtAtomicNearResponse(req.nearFutureId(), req.dhtNodes()) : null;
+            new GridDhtAtomicNearResponse(ctx.cacheId(), req.nearFutureId(), req.dhtNodes(), req.flags()) : null;
 
-        Boolean replicate = ctx.isDrEnabled();
+        boolean replicate = ctx.isDrEnabled();
 
         boolean intercept = req.forceTransformBackups() && ctx.config().getInterceptor() != null;
 

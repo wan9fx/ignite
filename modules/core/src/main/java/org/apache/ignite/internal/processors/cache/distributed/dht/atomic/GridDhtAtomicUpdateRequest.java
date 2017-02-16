@@ -148,9 +148,6 @@ public class GridDhtAtomicUpdateRequest extends GridDhtAtomicAbstractUpdateReque
     /** Keep binary flag. */
     private boolean keepBinary;
 
-    /** Additional flags. */
-    private byte flags;
-
     /**
      * Empty constructor required by {@link Externalizable}.
      */
@@ -522,7 +519,7 @@ public class GridDhtAtomicUpdateRequest extends GridDhtAtomicAbstractUpdateReque
 
     /** {@inheritDoc} */
     @Override public boolean skipStore() {
-        return isFlag(SKIP_STORE_FLAG_MASK);
+        return isFlag(DHT_ATOMIC_SKIP_STORE_FLAG_MASK);
     }
 
     /** {@inheritDoc} */
@@ -612,26 +609,20 @@ public class GridDhtAtomicUpdateRequest extends GridDhtAtomicAbstractUpdateReque
         }
 
         switch (writer.state()) {
-            case 6:
+            case 7:
                 if (!writer.writeMessage("conflictExpireTimes", conflictExpireTimes))
                     return false;
 
                 writer.incrementState();
 
-            case 7:
+            case 8:
                 if (!writer.writeCollection("conflictVers", conflictVers, MessageCollectionItemType.MSG))
                     return false;
 
                 writer.incrementState();
 
-            case 8:
-                if (!writer.writeCollection("entryProcessorsBytes", entryProcessorsBytes, MessageCollectionItemType.BYTE_ARR))
-                    return false;
-
-                writer.incrementState();
-
             case 9:
-                if (!writer.writeByte("flags", flags))
+                if (!writer.writeCollection("entryProcessorsBytes", entryProcessorsBytes, MessageCollectionItemType.BYTE_ARR))
                     return false;
 
                 writer.incrementState();
@@ -766,7 +757,7 @@ public class GridDhtAtomicUpdateRequest extends GridDhtAtomicAbstractUpdateReque
             return false;
 
         switch (reader.state()) {
-            case 6:
+            case 7:
                 conflictExpireTimes = reader.readMessage("conflictExpireTimes");
 
                 if (!reader.isLastRead())
@@ -774,7 +765,7 @@ public class GridDhtAtomicUpdateRequest extends GridDhtAtomicAbstractUpdateReque
 
                 reader.incrementState();
 
-            case 7:
+            case 8:
                 conflictVers = reader.readCollection("conflictVers", MessageCollectionItemType.MSG);
 
                 if (!reader.isLastRead())
@@ -782,16 +773,8 @@ public class GridDhtAtomicUpdateRequest extends GridDhtAtomicAbstractUpdateReque
 
                 reader.incrementState();
 
-            case 8:
-                entryProcessorsBytes = reader.readCollection("entryProcessorsBytes", MessageCollectionItemType.BYTE_ARR);
-
-                if (!reader.isLastRead())
-                    return false;
-
-                reader.incrementState();
-
             case 9:
-                flags = reader.readByte("flags");
+                entryProcessorsBytes = reader.readCollection("entryProcessorsBytes", MessageCollectionItemType.BYTE_ARR);
 
                 if (!reader.isLastRead())
                     return false;
@@ -974,27 +957,6 @@ public class GridDhtAtomicUpdateRequest extends GridDhtAtomicAbstractUpdateReque
     @Override public byte fieldsCount() {
         return 29;
     }
-
-    /**
-     * Sets flag mask.
-     *
-     * @param flag Set or clear.
-     * @param mask Mask.
-     */
-    private void setFlag(boolean flag, int mask) {
-        flags = flag ? (byte)(flags | mask) : (byte)(flags & ~mask);
-    }
-
-    /**
-     * Reags flag mask.
-     *
-     * @param mask Mask to read.
-     * @return Flag value.
-     */
-    private boolean isFlag(int mask) {
-        return (flags & mask) != 0;
-    }
-
 
     /** {@inheritDoc} */
     @Override public String toString() {

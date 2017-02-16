@@ -25,7 +25,6 @@ import org.apache.ignite.internal.GridDirectCollection;
 import org.apache.ignite.internal.processors.cache.GridCacheDeployable;
 import org.apache.ignite.internal.processors.cache.GridCacheMessage;
 import org.apache.ignite.internal.processors.cache.GridCacheSharedContext;
-import org.apache.ignite.internal.processors.cache.version.GridCacheVersion;
 import org.apache.ignite.internal.util.typedef.F;
 import org.apache.ignite.plugin.extensions.communication.MessageCollectionItemType;
 import org.apache.ignite.plugin.extensions.communication.MessageReader;
@@ -42,7 +41,7 @@ public class GridDhtAtomicDeferredUpdateResponse extends GridCacheMessage implem
     public static final int CACHE_MSG_IDX = nextIndexId();
 
     /** ACK future versions. */
-    @GridDirectCollection(GridCacheVersion.class)
+    @GridDirectCollection(Long.class)
     private Collection<Long> futIds;
 
     /** {@inheritDoc} */
@@ -105,7 +104,7 @@ public class GridDhtAtomicDeferredUpdateResponse extends GridCacheMessage implem
 
         switch (writer.state()) {
             case 3:
-                if (!writer.writeCollection("futIds", futIds, MessageCollectionItemType.MSG))
+                if (!writer.writeCollection("futIds", futIds, MessageCollectionItemType.LONG))
                     return false;
 
                 writer.incrementState();
@@ -127,7 +126,7 @@ public class GridDhtAtomicDeferredUpdateResponse extends GridCacheMessage implem
 
         switch (reader.state()) {
             case 3:
-                futIds = reader.readCollection("futIds", MessageCollectionItemType.MSG);
+                futIds = reader.readCollection("futIds", MessageCollectionItemType.LONG);
 
                 if (!reader.isLastRead())
                     return false;
